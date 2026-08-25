@@ -7,6 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
+import { originAllowed } from "@/lib/safeUrl";
 
 export const runtime = "nodejs";
 
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
   const wParam = Number(searchParams.get("w") ?? "384");
 
   if (!url) return new NextResponse("Missing url", { status: 400 });
-  if (!R2_BASE || !url.startsWith(R2_BASE)) {
+  if (!R2_BASE || !originAllowed(url, [R2_BASE])) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 

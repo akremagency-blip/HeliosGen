@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 
 export type JobResult =
@@ -6,7 +7,12 @@ export type JobResult =
   | { status: "done"; imageUrl?: string; imageUrls?: string[]; videoUrl?: string }
   | { status: "error"; error: string };
 
-const FILE = join(process.cwd(), ".job-store.json");
+// tmpdir, not cwd: the app bundle is read-only on Vercel/Lambda, and writeFileSync
+// there threw inside the callback's promise chain — silently stranding every job
+// as "pending". This is only a cache; job-status falls back to the DB on a miss.
+// ponytail: per-instance, so a multi-replica deploy just misses more often and
+// re-reads the DB. Move to Redis only if that read volume ever shows up.
+const FILE = join(tmpdir(), "heliosgen-job-store.json");
 
 function read(): Record<string, JobResult> {
   if (!existsSync(FILE)) return {};

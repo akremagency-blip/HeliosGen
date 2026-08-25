@@ -5,6 +5,13 @@ import { MODEL_GROUPS } from "@/lib/models";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
 import { PROVIDERS, ProviderId, loadModelProviders, saveModelProviders, getModelProvider } from "@/lib/providers";
+import { getToken } from "@/lib/galleryUtils";
+
+/** The codex routes require a session now — same shape as authHeader() below. */
+async function codexAuth(): Promise<Record<string, string>> {
+  const token = await getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 /* ─── Provider options (re-exported for backwards compat) ───────────────────── */
 
@@ -458,7 +465,7 @@ function ApiKeysPanel({
   const handleConnectCodex = async () => {
     setLoginFlow({ status: "starting" });
     try {
-      const res = await fetch("/api/settings/codex-login", { method: "POST" });
+      const res = await fetch("/api/settings/codex-login", { method: "POST", headers: await codexAuth() });
       const d = await res.json();
       if (d.status === "pending") setLoginFlow({ status: "pending", url: d.url, code: d.code });
       else setLoginFlow({ status: "error", error: d.error ?? "Failed to start login" });
@@ -479,7 +486,7 @@ function ApiKeysPanel({
     if (loginFlow.status !== "pending") return;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("/api/settings/codex-login");
+        const res = await fetch("/api/settings/codex-login", { headers: await codexAuth() });
         const d = await res.json();
         if (d.status === "success") {
           setLoginFlow({ status: "idle" });
@@ -1342,7 +1349,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   }
 
   const refreshCodexStatus = useCallback(() => {
-    fetch("/api/settings/codex-status")
+    codexAuth()
+      .then((headers) => fetch("/api/settings/codex-status", { headers }))
       .then((r) => r.json())
       .then((d: { ready: boolean; installed: boolean; authFound: boolean }) =>
         setCodexStatus(d.ready ? { kind: "ready" } : { kind: "not_ready", installed: d.installed, authFound: d.authFound })

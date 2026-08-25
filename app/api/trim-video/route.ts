@@ -6,6 +6,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { uploadBuffer } from "@/lib/r2";
+import { resolveUserId } from "@/lib/guestMode";
+import { fetchGuarded, readCapped } from "@/lib/safeUrl";
 import { writeFile, readFile, unlink, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -16,11 +18,18 @@ const execFileAsync = promisify(execFile);
 
 export const maxDuration = 120;
 
+const MAX_BYTES = 500 * 1024 * 1024; // 500 MB
+
 export async function POST(req: NextRequest) {
   let inputPath: string | null  = null;
   let outputPath: string | null = null;
 
   try {
+    // Was anonymous — same exposure as /api/extract-frame.
+    if (!(await resolveUserId(req))) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { videoUrl, startTime, endTime } = await req.json();
 
     if (!videoUrl || startTime === undefined || endTime === undefined) {
@@ -31,11 +40,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Download the video
-    const res = await fetch(videoUrl);
+    const res = await fetchGuarded(videoUrl);
     if (!res.ok) {
       return NextResponse.json({ error: `Failed to fetch video: ${res.status}` }, { status: 400 });
     }
-    const videoBuffer = Buffer.from(await res.arrayBuffer());
+    const videoBuffer = await readCapped(res, MAX_BYTES);
+    if (!videoBuffer) {
+      return NextResponse.json({ error: "Video exceeds 500 MB limit" }, { status: 413 });
+    }
     const contentType = res.headers.get("content-type") ?? "video/mp4";
 
     // Write to temp files

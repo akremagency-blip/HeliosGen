@@ -7,6 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { GUEST_MODE } from "@/lib/guestMode";
+import { originAllowed } from "@/lib/safeUrl";
 
 const ALLOWED_ORIGINS = [
   process.env.R2_PUBLIC_URL ?? "",
@@ -18,14 +19,17 @@ const ALLOWED_ORIGINS = [
 
 function isAllowed(url: string): boolean {
   if (GUEST_MODE && url.startsWith("/generated/")) return true; // local disk, served same-origin
-  return ALLOWED_ORIGINS.some((origin) => url.startsWith(origin));
+  return originAllowed(url, ALLOWED_ORIGINS);
 }
 
 export const runtime = "edge";
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
-  const filename = req.nextUrl.searchParams.get("filename") ?? "download";
+  // Quotes and control chars here would break out of the Content-Disposition attribute.
+  const filename = (req.nextUrl.searchParams.get("filename") ?? "download")
+    .replace(/[^w.-]+/g, "_")
+    .slice(0, 128) || "download";
 
   if (!url) return new NextResponse("Missing url", { status: 400 });
   if (!isAllowed(url)) return new NextResponse("Forbidden", { status: 403 });

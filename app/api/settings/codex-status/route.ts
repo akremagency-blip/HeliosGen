@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { resolveUserId } from "@/lib/guestMode";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -17,7 +18,11 @@ function binaryOnPath(): Promise<boolean> {
   });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!(await resolveUserId(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const authPath = join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "auth.json");
   const [installed, authFound] = await Promise.all([
     binaryOnPath(),

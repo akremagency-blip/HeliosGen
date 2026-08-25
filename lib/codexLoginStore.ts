@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 
 // File-based (not in-memory) so state survives Next.js dev's module reloads —
@@ -9,7 +10,7 @@ export type CodexLoginState =
   | { status: "success" }
   | { status: "error"; error: string };
 
-const FILE = join(process.cwd(), ".codex-login-store.json");
+const FILE = join(tmpdir(), "heliosgen-codex-login.json");
 
 function read(): CodexLoginState {
   if (!existsSync(FILE)) return { status: "idle" };

@@ -12,6 +12,7 @@ import { IMAGE_MODELS, validateAzureCustomSize } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { getAzureKeyForUser } from "@/lib/getAzureKey";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
+import { callbackUrl } from "@/lib/callbackAuth";
 import * as guestDb from "@/lib/guest/db";
 
 const BASE   = "https://api.kie.ai";
@@ -520,7 +521,7 @@ export async function POST(req: NextRequest) {
   const callbackBase = process.env.CALLBACK_BASE_URL;
   if (!callbackBase) return NextResponse.json({ error: "CALLBACK_BASE_URL is not set" }, { status: 500 });
 
-  const callBackUrl = `${callbackBase.replace(/\/$/, "")}/api/callback`;
+  const callBackUrl = callbackUrl(callbackBase);
 
   try {
     const { apiInput } = cfg;

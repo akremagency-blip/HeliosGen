@@ -93,7 +93,6 @@ export async function GET(req: NextRequest) {
   const genUrlCol = mediaType === "video" ? "video_url" : "image_url";
 
   let genItems: Item[] = [];
-  let genError: { message: string } | null = null;
   if (!source || source === "generation") {
     const { data: gens, error } = await supabaseAdmin
       .from("generations")
@@ -105,7 +104,7 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(TABLE_CAP);
 
-    if (error) { console.error("[gallery] generations query error:", error.message); genError = error; }
+    if (error) console.error("[gallery] generations query error:", error.message);
     genItems = (gens ?? []).map((g) => ({
       id:                  g.id,
       url:                 (mediaType === "video" ? g.video_url : g.image_url) as string,
@@ -125,7 +124,6 @@ export async function GET(req: NextRequest) {
   }
 
   let uploadItems: Item[] = [];
-  let uploadError: { message: string } | null = null;
   if (!source || source === "upload") {
     const { data: uploads, error } = await supabaseAdmin
       .from("user_uploads")
@@ -135,7 +133,7 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(TABLE_CAP);
 
-    if (error) { console.error("[gallery] user_uploads query error:", error.message); uploadError = error; }
+    if (error) console.error("[gallery] user_uploads query error:", error.message);
     uploadItems = (uploads ?? []).map((u) => ({
       id:         u.id,
       url:        u.r2_url,
@@ -165,12 +163,6 @@ export async function GET(req: NextRequest) {
     items:   allItems.slice(offset, offset + LIMIT),
     hasMore: allItems.length > offset + LIMIT,
     total:   allItems.length,
-    debug: {
-      generationsFound: genItems.length,
-      uploadsFound:     uploadItems.length,
-      genError:         genError?.message ?? null,
-      uploadError:      uploadError?.message ?? null,
-    },
   });
 }
 

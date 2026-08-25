@@ -5,6 +5,7 @@ import http  from "node:http";
 import { hashBuffer, lookupAssetHash, storeAssetHash } from "./assetCache";
 import { GUEST_MODE } from "./guestMode";
 import { stripMetadata } from "./mediaMetadata";
+import { isBlockedHost } from "./safeUrl";
 import * as localStore from "./guest/localStorage";
 
 let _s3: S3Client | null = null;
@@ -74,6 +75,9 @@ export async function uploadBuffer(
 function fetchToBuffer(url: string, maxRedirects = 5): Promise<{ buf: Buffer; contentType: string }> {
   return new Promise((resolve, reject) => {
     if (maxRedirects <= 0) return reject(new Error("Too many redirects"));
+    // Checked here rather than at the callers: this recurses on redirects, so it is
+    // the only place that sees every hop.
+    if (isBlockedHost(url)) return reject(new Error("Blocked URL"));
     const u   = new URL(url);
     const mod = u.protocol === "https:" ? https : (http as unknown as typeof https);
     mod.get(url, (res) => {

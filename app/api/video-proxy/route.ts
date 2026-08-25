@@ -6,6 +6,7 @@
  * Forwards Range headers so seeking stays efficient.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { originAllowed } from "@/lib/safeUrl";
 
 export const runtime = "edge";
 
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   // Security: only proxy our own R2 CDN
   const r2Base = (process.env.R2_PUBLIC_URL ?? "").replace(/\/$/, "");
-  if (!r2Base || !url.startsWith(r2Base)) {
+  if (!r2Base || !originAllowed(url, [r2Base])) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 

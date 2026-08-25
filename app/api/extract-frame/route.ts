@@ -6,6 +6,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { uploadBuffer } from "@/lib/r2";
+import { resolveUserId } from "@/lib/guestMode";
+import { fetchGuarded, readCapped } from "@/lib/safeUrl";
 import { writeFile, readFile, unlink, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -16,22 +18,33 @@ const execFileAsync = promisify(execFile);
 
 export const maxDuration = 60;
 
+const MAX_BYTES = 500 * 1024 * 1024; // 500 MB
+
 export async function POST(req: NextRequest) {
   let inputPath: string | null  = null;
   let outputPath: string | null = null;
 
   try {
+    // Was anonymous: an unauthenticated fetch of any URL, written to disk and
+    // fed to ffmpeg — SSRF plus a free way to fill the disk and pin the CPU.
+    if (!(await resolveUserId(req))) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { videoUrl, timeSeconds = 0, lastFrame = false } = await req.json();
 
     if (!videoUrl) {
       return NextResponse.json({ error: "videoUrl is required" }, { status: 400 });
     }
 
-    const res = await fetch(videoUrl);
+    const res = await fetchGuarded(videoUrl);
     if (!res.ok) {
       return NextResponse.json({ error: `Failed to fetch video: ${res.status}` }, { status: 400 });
     }
-    const videoBuffer = Buffer.from(await res.arrayBuffer());
+    const videoBuffer = await readCapped(res, MAX_BYTES);
+    if (!videoBuffer) {
+      return NextResponse.json({ error: "Video exceeds 500 MB limit" }, { status: 413 });
+    }
 
     const tmpDir  = await mkdtemp(join(tmpdir(), "frame-"));
     inputPath  = join(tmpDir, "input.mp4");

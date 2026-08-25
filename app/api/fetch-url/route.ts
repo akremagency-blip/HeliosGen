@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadBuffer } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
+import { fetchGuarded, readCapped } from "@/lib/safeUrl";
 import * as guestDb from "@/lib/guest/db";
 
 export const maxDuration = 60;
@@ -17,6 +18,11 @@ const MAX_BYTES = 50 * 1024 * 1024; // 50 MB
 
 export async function POST(req: NextRequest) {
   try {
+    // Was anonymous: any passer-by could make the server fetch a URL of their
+    // choosing and bank the result in our R2.
+    const userId = await resolveUserId(req);
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const { url } = await req.json() as { url?: string };
     if (!url || typeof url !== "string") {
       return NextResponse.json({ error: "Missing url" }, { status: 400 });
@@ -32,9 +38,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Only http/https URLs are supported" }, { status: 400 });
     }
 
-    const upstream = await fetch(url, {
+    const upstream = await fetchGuarded(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; HeliosGen/1.0)" },
-      redirect: "follow",
     });
 
     if (!upstream.ok) {
@@ -50,8 +55,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "URL does not point to an image or video" }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await upstream.arrayBuffer());
-    if (buffer.byteLength > MAX_BYTES) {
+    const buffer = await readCapped(upstream, MAX_BYTES);
+    if (!buffer) {
       return NextResponse.json({ error: "File exceeds 50 MB limit" }, { status: 413 });
     }
 
@@ -60,8 +65,7 @@ export async function POST(req: NextRequest) {
     const mediaType: "image" | "video" = isImage ? "image" : "video";
 
     // Record in user_uploads so it appears in the gallery "uploaded" section
-    const userId = await resolveUserId(req);
-    if (userId) {
+    {
       if (GUEST_MODE) {
         guestDb.insertUpload({ user_id: userId, r2_url: cdnUrl, mime_type: mimeType, source: "user_upload" });
       } else {

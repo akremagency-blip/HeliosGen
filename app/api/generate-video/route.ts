@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
+import { callbackUrl } from "@/lib/callbackAuth";
 import * as guestDb from "@/lib/guest/db";
 
 const KIE_BASE = "https://api.kie.ai";
@@ -43,7 +44,6 @@ export async function POST(req: NextRequest) {
     seed,
     veoMode,
     generationType: rawGenerationType,
-    callBackUrl:    rawCallBackUrl,
     debugOnly       = false,
   } = body;
 
@@ -53,8 +53,10 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
   const callbackBase = process.env.CALLBACK_BASE_URL;
-  const callBackUrl = rawCallBackUrl || (callbackBase ? `${callbackBase.replace(/\/$/, "")}/api/callback` : undefined);
-  if (!callBackUrl) return NextResponse.json({ error: "callBackUrl or CALLBACK_BASE_URL not set" }, { status: 500 });
+  // The webhook target is server config, never client input: an attacker-chosen
+  // callBackUrl would have redirected the provider's result (and our secret) off-site.
+  if (!callbackBase) return NextResponse.json({ error: "CALLBACK_BASE_URL is not set" }, { status: 500 });
+  const callBackUrl = callbackUrl(callbackBase);
 
   const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
   if (!cfg) return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });

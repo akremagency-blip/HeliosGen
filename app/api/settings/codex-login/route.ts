@@ -1,6 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import { codexLoginStore } from "@/lib/codexLoginStore";
+import { resolveUserId } from "@/lib/guestMode";
+
+// Both handlers were anonymous. GET handed out the pending device code, so a
+// stranger could complete the login against their own ChatGPT account; POST
+// started a fresh one, which the CLI honours by wiping the existing session —
+// an unauthenticated logout button.
+const UNAUTHORIZED = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
 // 15 minutes, matching the device code's own expiry (plus a little slack).
 const CODE_LIFETIME_MS = 16 * 60 * 1000;
@@ -21,11 +28,14 @@ function checkLoginStatus(): Promise<boolean> {
   });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!(await resolveUserId(req))) return UNAUTHORIZED;
   return NextResponse.json(codexLoginStore.get());
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  if (!(await resolveUserId(req))) return UNAUTHORIZED;
+
   const current = codexLoginStore.get();
 
   // A device code is already pending and still within its lifetime — don't

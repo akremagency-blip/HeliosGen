@@ -4,6 +4,7 @@ import { jobEvents } from "@/lib/jobEvents";
 import { mirrorToR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE } from "@/lib/guestMode";
+import { callbackTokenValid } from "@/lib/callbackAuth";
 import * as guestDb from "@/lib/guest/db";
 
 function extractUrls(resultJson?: string): string[] {
@@ -25,8 +26,12 @@ function settle(taskId: string, result: Parameters<typeof jobStore.set>[1]) {
 }
 
 export async function POST(req: NextRequest) {
+  // Only the provider we handed the secret to may settle a job — see lib/callbackAuth.ts.
+  if (!callbackTokenValid(req.nextUrl.searchParams.get("s"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = await req.json();
-  console.log("[callback] received:", JSON.stringify(body, null, 2));
 
   const data   = body.data ?? body;
   const taskId = data.taskId ?? data.id ?? body.taskId ?? body.id;
