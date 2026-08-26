@@ -30,6 +30,15 @@ const PRIVATE_IPV4 = /^(?:10|127|0)\.|^169\.254\.|^192\.168\.|^172\.(?:1[6-9]|2\
  * agent. Every caller also requires an authenticated user, which is what keeps
  * these routes from being an open relay — upgrade this if one ever goes public.
  */
+export class BlockedUrlError extends Error {
+  constructor(message: string) { super(message); this.name = "BlockedUrlError"; }
+}
+
+/** A rejected target is the caller's fault (400), not ours (500). */
+export function isBlockedUrlError(e: unknown): boolean {
+  return e instanceof BlockedUrlError;
+}
+
 export function isBlockedHost(url: string): boolean {
   let u: URL;
   try { u = new URL(url); } catch { return true; }
@@ -71,12 +80,12 @@ export async function readCapped(res: Response, maxBytes: number): Promise<Buffe
 export async function fetchGuarded(url: string, init: RequestInit = {}, maxHops = 3): Promise<Response> {
   let target = url;
   for (let hop = 0; hop <= maxHops; hop++) {
-    if (isBlockedHost(target)) throw new Error("Blocked URL");
+    if (isBlockedHost(target)) throw new BlockedUrlError("Blocked URL");
     const res = await fetch(target, { ...init, redirect: "manual" });
     if (res.status < 300 || res.status >= 400) return res;
     const loc = res.headers.get("location");
     if (!loc) return res;
     target = new URL(loc, target).toString();
   }
-  throw new Error("Too many redirects");
+  throw new BlockedUrlError("Too many redirects");
 }

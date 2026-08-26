@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadBuffer } from "@/lib/r2";
 import { resolveUserId } from "@/lib/guestMode";
-import { fetchGuarded, readCapped } from "@/lib/safeUrl";
+import { fetchGuarded, readCapped, isBlockedUrlError } from "@/lib/safeUrl";
 import { writeFile, readFile, unlink, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[extract-frame] error:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: isBlockedUrlError(e) ? 400 : 500 });
   } finally {
     await Promise.all([
       inputPath  ? unlink(inputPath).catch(() => {})  : Promise.resolve(),

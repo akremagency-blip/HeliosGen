@@ -15,6 +15,7 @@ import { createHash } from "crypto";
 import { supabaseAdmin } from "./supabase/admin";
 import { GUEST_MODE } from "./guestMode";
 import * as guestDb from "./guest/db";
+import { debugLog } from "./debugLog";
 
 /** Compute SHA-256 hex from a Node.js Buffer (server-side). */
 export function hashBuffer(buf: Buffer): string {
@@ -37,8 +38,8 @@ export async function lookupAssetHash(hash: string): Promise<string | null> {
       console.error("[asset-cache] lookup error:", error.message);
       return null;
     }
-    if (data) console.log("[asset-cache] HIT for hash:", hash.slice(0, 8), "->", data.cdn_url);
-    else console.log("[asset-cache] MISS for hash:", hash.slice(0, 8));
+    if (data) debugLog("[asset-cache] HIT for hash:", hash.slice(0, 8), "->", data.cdn_url);
+    else debugLog("[asset-cache] MISS for hash:", hash.slice(0, 8));
     return data?.cdn_url ?? null;
   } catch (err) {
     console.error("[asset-cache] unexpected lookup error:", err);
@@ -57,7 +58,7 @@ export async function storeAssetHash(
   byteSize: number,
 ): Promise<void> {
   if (GUEST_MODE) { guestDb.storeAssetHash(hash, cdnUrl, mimeType, byteSize); return; }
-  console.log("[asset-cache] storing hash:", hash.slice(0, 8), "->", cdnUrl);
+  debugLog("[asset-cache] storing hash:", hash.slice(0, 8), "->", cdnUrl);
   const { error } = await supabaseAdmin
     .from("asset_cache")
     .upsert(

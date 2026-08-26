@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
+import { debugLog } from "@/lib/debugLog";
 import { callbackUrl } from "@/lib/callbackAuth";
 import * as guestDb from "@/lib/guest/db";
 
@@ -352,7 +353,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ debugPayload: kieBody, debugEndpoint: endpoint });
   }
 
-  console.log(`[generate-video] sending to ${endpoint}:`, JSON.stringify(kieBody));
+  debugLog(`[generate-video] sending to ${endpoint}:`, JSON.stringify(kieBody));
   const createRes = await fetch(endpoint, {
     method:  "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -369,7 +370,7 @@ export async function POST(req: NextRequest) {
   }
 
   const createdText = await createRes.text();
-  console.log("[generate-video] kie.ai response:", createdText);
+  debugLog("[generate-video] kie.ai response:", createdText);
   let created: { code?: number; msg?: string; data?: { taskId?: string; id?: string } };
   try {
     created = JSON.parse(createdText);

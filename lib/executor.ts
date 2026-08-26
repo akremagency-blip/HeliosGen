@@ -1,5 +1,5 @@
-import { Node, Edge } from "@xyflow/react";
-import { NodeData } from "./store";
+import type { Node, Edge } from "@xyflow/react";
+import type { NodeData } from "./store";
 
 /** Topological sort — returns node ids in execution order */
 export function topoSort(nodes: Node<NodeData>[], edges: Edge[]): string[] {
@@ -11,8 +11,12 @@ export function topoSort(nodes: Node<NodeData>[], edges: Edge[]): string[] {
     inDegree[n.id] = 0;
   }
   for (const e of edges) {
+    // An edge can outlive the node it points at — an older saved workflow, a
+    // shared space loaded from /api/public/space, a partial save. Indexing adj
+    // blindly threw a TypeError here and took the whole canvas down with it.
+    if (!adj[e.source] || !(e.target in inDegree)) continue;
     adj[e.source].push(e.target);
-    inDegree[e.target] = (inDegree[e.target] || 0) + 1;
+    inDegree[e.target]++;
   }
 
   const queue = Object.entries(inDegree)

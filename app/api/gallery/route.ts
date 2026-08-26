@@ -3,8 +3,12 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE, GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 
-const LIMIT     = 20;
-const TABLE_CAP = 1000;
+const LIMIT = 20;
+
+// The union's top N is always contained in (top N of generations) ∪ (top N of
+// uploads), so fetching N from each is exact — no need for the old blanket
+// 1000-row cap, which pulled 2000 rows on every request to hand back 20.
+const windowFor = (offset: number) => offset + LIMIT + 1;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
@@ -91,20 +95,27 @@ export async function GET(req: NextRequest) {
   const userId = authData.user.id;
 
   const genUrlCol = mediaType === "video" ? "video_url" : "image_url";
+  const offset = page * LIMIT;
+
+  // Exact row counts come back with the ranged query, so the sidebar badge is
+  // now right past 2000 items instead of saturating at the old cap.
+  let genTotal = 0;
+  let uploadTotal = 0;
 
   let genItems: Item[] = [];
   if (!source || source === "generation") {
-    const { data: gens, error } = await supabaseAdmin
+    const { data: gens, error, count } = await supabaseAdmin
       .from("generations")
-      .select("id, generation_type, prompt, model, aspect_ratio, image_url, image_urls, video_url, quality, azure_resolution, created_at, reference_image_urls")
+      .select("id, generation_type, prompt, model, aspect_ratio, image_url, image_urls, video_url, quality, azure_resolution, created_at, reference_image_urls", { count: "exact" })
       .eq("user_id", userId)
       .eq("generation_type", mediaType)
       .eq("status", "done")
       .not(genUrlCol, "is", null)
       .order("created_at", { ascending: false })
-      .limit(TABLE_CAP);
+      .range(0, windowFor(offset) - 1);
 
     if (error) console.error("[gallery] generations query error:", error.message);
+    genTotal = count ?? 0;
     genItems = (gens ?? []).map((g) => ({
       id:                  g.id,
       url:                 (mediaType === "video" ? g.video_url : g.image_url) as string,
@@ -125,15 +136,16 @@ export async function GET(req: NextRequest) {
 
   let uploadItems: Item[] = [];
   if (!source || source === "upload") {
-    const { data: uploads, error } = await supabaseAdmin
+    const { data: uploads, error, count } = await supabaseAdmin
       .from("user_uploads")
-      .select("id, r2_url, mime_type, created_at")
+      .select("id, r2_url, mime_type, created_at", { count: "exact" })
       .eq("user_id", userId)
       .like("mime_type", `${mediaType}/%`)
       .order("created_at", { ascending: false })
-      .limit(TABLE_CAP);
+      .range(0, windowFor(offset) - 1);
 
     if (error) console.error("[gallery] user_uploads query error:", error.message);
+    uploadTotal = count ?? 0;
     uploadItems = (uploads ?? []).map((u) => ({
       id:         u.id,
       url:        u.r2_url,
@@ -157,12 +169,11 @@ export async function GET(req: NextRequest) {
       })();
 
   allItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  const offset = page * LIMIT;
 
   return NextResponse.json({
     items:   allItems.slice(offset, offset + LIMIT),
     hasMore: allItems.length > offset + LIMIT,
-    total:   allItems.length,
+    total:   genTotal + uploadTotal,
   });
 }
 

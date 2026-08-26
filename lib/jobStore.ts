@@ -24,6 +24,8 @@ function write(data: Record<string, JobResult>): void {
   writeFileSync(FILE, JSON.stringify(data), "utf8");
 }
 
+const MAX_ENTRIES = 500;
+
 export const jobStore = {
   get(taskId: string): JobResult | undefined {
     return read()[taskId];
@@ -31,6 +33,15 @@ export const jobStore = {
   set(taskId: string, result: JobResult): void {
     const data = read();
     data[taskId] = result;
+
+    // It grew one entry per generation, forever, and every get() re-parsed the
+    // whole file. Keys are insertion-ordered, so slicing the front drops the
+    // oldest. Losing one only costs a DB read in job-status's recoverJob.
+    const keys = Object.keys(data);
+    if (keys.length > MAX_ENTRIES) {
+      for (const k of keys.slice(0, keys.length - MAX_ENTRIES)) delete data[k];
+    }
+
     write(data);
   },
 };

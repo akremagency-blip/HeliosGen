@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadBuffer } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
-import { fetchGuarded, readCapped } from "@/lib/safeUrl";
+import { fetchGuarded, readCapped, isBlockedUrlError } from "@/lib/safeUrl";
 import * as guestDb from "@/lib/guest/db";
 
 export const maxDuration = 60;
@@ -83,6 +83,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ cdnUrl, mediaType });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: isBlockedUrlError(e) ? 400 : 500 });
   }
 }

@@ -7,14 +7,19 @@ export default function CreditBalance() {
   const [balance, setBalance] = useState<number | null>(null);
   const isRunning = useWorkflowStore((s) => s.isRunning);
   const prevRunning = useRef(false);
+  const keyRejected = useRef(false);
 
   const fetchBalance = async () => {
+    if (keyRejected.current) return;
     try {
       const { data: { session } } = await createClient().auth.getSession();
       const headers: HeadersInit = session?.access_token
         ? { Authorization: `Bearer ${session.access_token}` }
         : {};
       const res = await fetch("/api/credit", { headers });
+      // A rejected key won't start working on its own — stop the 1/min poll
+      // rather than hammering kie.ai from every open tab until reload.
+      if (res.status === 401) { keyRejected.current = true; return; }
       if (!res.ok) return;
       const data = await res.json();
       const val = typeof data?.data === "number" ? data.data : (data?.data?.balance ?? data?.balance ?? null);
