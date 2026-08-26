@@ -7,7 +7,10 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
   experimental: {
-    proxyClientMaxBodySize: '30mb',
+    // Every upload route caps at 100 MB and says so in its 413. The proxy
+    // sits in front of them, so a lower cap here is the real limit and the
+    // route's own error message becomes a lie.
+    proxyClientMaxBodySize: '100mb',
   },
   serverExternalPackages: ["undici"],
   images: {

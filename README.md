@@ -272,6 +272,109 @@ Recommended platforms:
 npm run build && npm start
 ```
 
+## Self-hosting on a VPS
+
+API keys are not the whole list. A plain `npm start` behind a default nginx
+will build, boot, and then fail at upload, at video, and at every job result.
+
+### 1. System packages
+
+```bash
+apt install ffmpeg          # provides both ffmpeg and ffprobe
+```
+
+`ffmpeg` is not optional. Every uploaded video is re-encoded through it to
+strip metadata (GPS tags among them), and trimming and frame extraction call
+it directly. Without it, video upload returns 400 and the video tools fail.
+`curl` is also spawned for the Azure image-edit path.
+
+Node 20+ is required. Use a process manager that restarts on boot — a
+systemd unit or `pm2 startup`; the in-memory rate limiter and the job cache
+are per-process, so run one instance unless you have a reason not to.
+
+### 2. nginx
+
+The defaults break two features outright:
+
+```nginx
+server {
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Uploads are capped at 100 MB in the app. nginx defaults to 1 MB, which
+    # rejects a phone photo before the app ever sees it.
+    client_max_body_size 100m;
+  }
+
+  location /api/job-stream {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+
+    # Server-sent events. Buffering holds the whole stream until it ends, so
+    # every generation looks like it hangs; the app sends X-Accel-Buffering: no
+    # as well, but set it here too if anything else sits in front.
+    proxy_buffering off;
+    proxy_cache off;
+
+    # Jobs run up to 12 minutes. The 60s default kills the stream first.
+    proxy_read_timeout 900s;
+  }
+}
+```
+
+### 3. Supabase
+
+Run both SQL files against the project — tables, row-level security and the
+folder schema:
+
+```bash
+psql "$DATABASE_URL" -f supabase-setup.sql
+psql "$DATABASE_URL" -f supabase-folders.sql
+```
+
+Then in the dashboard:
+
+- **Authentication → URL Configuration** — set Site URL to your domain and add
+  it to Redirect URLs. Sign-up confirmations use the Site URL and password
+  resets use the page's own origin; left at the default, both mail out links
+  pointing at `localhost:3000`.
+- **Authentication → SMTP Settings** — connect a real sender (Resend, SES,
+  Postmark, …). The built-in one is rate-limited to a handful of messages an
+  hour and is explicitly not for production, so sign-ups silently stop.
+
+### 4. Cloudflare R2
+
+Enable public access on the bucket and put that hostname in `R2_PUBLIC_URL`.
+The browser loads media straight from it, so allow your domain as an origin.
+
+### 5. Environment
+
+Everything in `.env.example`, plus:
+
+- `CALLBACK_BASE_URL` — the public **https** origin of this deployment. The
+  provider POSTs finished jobs there; if it is wrong or unreachable, requests
+  are accepted and no result ever arrives.
+- `CALLBACK_SECRET` — `openssl rand -hex 32`. Optional (it falls back to a
+  value derived from another key), but set it so the webhook secret rotates
+  independently of your API keys.
+- `NEXT_PUBLIC_APP_URL` — your domain.
+- **Do not set `GUEST_MODE` on a public host.** Guest mode treats every caller
+  as the same user, which turns every ownership and auth check into a no-op.
+
+Users supply their own kie.ai key through Settings, so no shared key is needed.
+
+### 6. Check it end to end
+
+Sign up (mail arrives), attach an image (no 413), start a generation, and watch
+it complete without a reload (SSE is getting through). If a job stays pending,
+the callback is not reaching you — check `CALLBACK_BASE_URL` and that
+`/api/callback` is not behind any auth or IP filter.
+
 ---
 
 # 🤝 Contributions

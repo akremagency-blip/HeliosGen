@@ -9,6 +9,9 @@ const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
   "Cache-Control": "no-cache",
   "Connection": "keep-alive",
+  // nginx buffers a proxied response by default, which holds the whole
+  // stream until it ends — every generation looks like it hangs on a VPS.
+  "X-Accel-Buffering": "no",
 };
 
 const TIMEOUT_MS = 12 * 60 * 1000; // 12 min hard cap

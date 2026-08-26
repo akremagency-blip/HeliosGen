@@ -407,7 +407,59 @@ crashes each traced to a declaration-order complaint inside a callback that only
 runs after mount. Worth working down deliberately; not worth restructuring
 working effects under release pressure.
 
-## 7. Before you deploy
+## 7. Second pass — the attach path and self-hosting
+
+The first pass tested `/api/upload-to-r2`, the paste-a-data-URL path. The
+attach button and the drop target do not use it: they POST raw bytes to
+`/api/upload-asset` and `/api/upload-video`, which nothing covered.
+
+### 7.1 Both raw-upload routes were open
+
+`upload-asset` and `upload-video` wrote to the bucket **before** consulting
+the session, and then used the session only to decide whether to record a row.
+An anonymous caller could push 100 MB objects into R2 in a loop — the same
+hole closed in `upload-to-r2` in the first pass, missed in its two siblings
+because they call `resolveUserId` and so read as authenticated.
+
+Both now gate first and upload second, sharing the 90/min limiter (high enough
+that attaching a dozen files at once does not trip it). Verified against a
+non-guest server: anonymous POSTs to all three return 401.
+
+### 7.2 A corrupt video returned 500 with a server path in the body
+
+Every uploaded video is re-encoded through ffmpeg to strip metadata. ffmpeg
+reports failure by echoing its whole command line, which contains the temp
+path the upload was just written to, and the route returned `e.message`
+verbatim. Attaching a truncated file leaked it.
+
+`stripMetadata` now throws `UnsupportedMediaError`, the routes answer 400
+with a message a user can act on, and the raw error goes to the log instead.
+Storing the unstripped original was the other option and would have kept the
+GPS tags the re-encode exists to remove.
+
+### 7.3 Two settings broke self-hosting behind nginx
+
+- `proxyClientMaxBodySize` was `30mb` while every upload route advertises a
+  100 MB limit in its own 413. The proxy sits in front, so the lower number
+  was the real one and the route's error message was a lie. Now aligned.
+- `/api/job-stream` sent no `X-Accel-Buffering: no`. nginx buffers a proxied
+  response by default and holds the whole SSE stream until it closes, so on a
+  VPS every generation appears to hang and then time out. One header.
+
+`README.md` now has a self-hosting section: ffmpeg as a hard requirement, the
+nginx block (`client_max_body_size`, `proxy_buffering off`, a 900s read
+timeout for the 12-minute job cap), the two SQL files, and the Supabase Auth
+settings — Site URL and a real SMTP sender — that decide whether sign-up mail
+arrives at all.
+
+### 7.4 Coverage
+
+The end-to-end suite went 17 → 26 checks. The new ones attach an image and a
+video through the button's actual path, re-attach to prove dedup, attach a
+corrupt file, and read the result back to confirm it decodes and that EXIF was
+stripped rather than passed through.
+
+## 8. Before you deploy
 
 1. **Set `CALLBACK_SECRET`** (`openssl rand -hex 32`) if you want the webhook
    secret independent of your kie.ai key. Optional — it derives one otherwise.
