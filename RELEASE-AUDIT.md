@@ -1,6 +1,6 @@
 # HeliosGen — Pre-Release Audit
 
-Branch `security/prerelease-hardening`, 12 commits.
+Branch `security/prerelease-hardening`, 15 commits.
 
 Everything below was verified by running it, not by reading it. Where a claim
 rests on a test, the command and its output are quoted.
@@ -302,11 +302,12 @@ limiting on.
 
 ## 6. What is left
 
-### 6.1 `GalleryInner` is one 4,189-line component — measured, deliberately not split
+### 6.1 `GalleryInner` is one 4,189-line component — measured three ways, not split
 
-The fifteen unrelated components behind it already moved out (7,517 → 4,974
-lines in `page.tsx`). What remains is a single component, and it does not come
-apart mechanically. Measured rather than guessed:
+`page.tsx` is now this component and nothing else: 7,517 → 4,310 lines, after
+the leaf components, 379 lines of demo fixtures, `PendingGenTile` and eleven
+helpers all moved out. What is left does not come apart mechanically, and that
+is measured three separate ways rather than asserted.
 
 ```
 owned state/refs: 105
@@ -323,6 +324,17 @@ referenced 3 times or fewer (candidates for extraction):
   -> 12 of 105   (all of them DOM handles and timer refs, not state)
 ```
 
+
+Two further routes were measured and refuted before settling on this:
+
+| route out | result |
+|---|---|
+| lift state into hooks | 92 of 105 state/refs form one island, zero clusters of 2+ outside it |
+| extract the 1,133-line JSX subtree | needs 190 props |
+| extract the 357-line subtree | needs 117 props |
+
+Every route is the same coupling wearing a different hat.
+
 There are no separable islands. Every meaningful piece of state is referenced
 about ten times across the body, so lifting any cluster into a hook means
 threading ten-plus values back through props — which makes the code worse, not
@@ -330,18 +342,41 @@ better. The real fix is moving this state into the zustand store the workflow
 side already uses, incrementally. That is a project, and it buys the user
 nothing, so it is not a pre-release task.
 
-### 6.2 A live ngrok URL remains in git history — a decision, not a task
+### 6.2 A live ngrok URL remains in git history — prepared, not executed
 
 `.env.guest` once carried a real tunnel address containing an IP
-(`217.217.246.2`). The working tree is clean; history is not.
+(`217.217.246.2`). The working tree is clean. History is not: the string
+entered in `361dc09` and rode along in `.env.guest` through roughly 110
+commits until it was fixed on this branch.
 
-**Recommendation: accept it.** No credential was ever committed — a
-full-history scan for key prefixes, JWTs and PEM blocks returns nothing. This is
-an address, on a tunnel that is long dead. Rewriting the history of a public
-repository with merged contributor pull requests rewrites every commit hash and
-breaks every existing clone, which is a real cost paid by other people. If you
-disagree, the rewrite is one `git filter-repo` invocation and should happen
-before any further pushes, not after.
+The rewrite was prepared and then deliberately left for a human. It changes
+every commit hash in a public repository carrying merged pull requests from
+two other contributors, so the decision and the force-push coordination are
+not mine to make.
+
+A full backup already exists **outside** the repository, which is the part
+that matters: `git filter-repo` rewrites in-repo branches and tags too, so a
+backup branch would have been rewritten along with everything else.
+
+```
+~/github/heliosgen-pre-rewrite.bundle   (9.4 MB, --all)
+```
+
+To run it:
+
+```bash
+printf '%s\n' 'f605-217-217-246-2.ngrok-free.app==>xxxx-xx-xx-xx-xx.ngrok-free.app' > scrub.txt
+git filter-repo --replace-text scrub.txt --force
+git remote add origin https://github.com/segfault42/heliosgen.git   # filter-repo drops it
+git push --force --all
+```
+
+If it goes wrong: `git clone ~/github/heliosgen-pre-rewrite.bundle`.
+
+**The recommendation is still to skip it.** No credential was ever committed —
+a full-history scan for key prefixes, JWTs and PEM blocks returns nothing. This
+is an address, on a tunnel that is long dead, and the cost of the rewrite is
+paid by everyone holding a clone.
 
 ### 6.3 Deliberate ceilings, marked in the code
 
