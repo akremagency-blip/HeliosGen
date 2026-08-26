@@ -344,8 +344,8 @@ nothing, so it is not a pre-release task.
 
 ### 6.2 A live ngrok URL remains in git history — prepared, not executed
 
-`.env.guest` once carried a real tunnel address containing an IP
-(`217.217.246.2`). The working tree is clean. History is not: the string
+`.env.guest` once carried a real ngrok tunnel address, which embeds the
+developer's public IP. The working tree is clean. History is not: the string
 entered in `361dc09` and rode along in `.env.guest` through roughly 110
 commits until it was fixed on this branch.
 
@@ -365,7 +365,8 @@ backup branch would have been rewritten along with everything else.
 To run it:
 
 ```bash
-printf '%s\n' 'f605-217-217-246-2.ngrok-free.app==>xxxx-xx-xx-xx-xx.ngrok-free.app' > scrub.txt
+# left as a literal address on purpose — read it out of `git log -p -- .env.guest`
+printf '%s\n' '<old-ngrok-host>==>xxxx-xx-xx-xx-xx.ngrok-free.app' > scrub.txt
 git filter-repo --replace-text scrub.txt --force
 git remote add origin https://github.com/segfault42/heliosgen.git   # filter-repo drops it
 git push --force --all
