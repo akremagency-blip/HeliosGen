@@ -7,14 +7,17 @@ import { GUEST_MODE } from "./guestMode";
 import { stripMetadata } from "./mediaMetadata";
 import { isBlockedHost } from "./safeUrl";
 import * as localStore from "./guest/localStorage";
+import { resolveS3Config, resolvePublicBase } from "./s3Config";
 
 let _s3: S3Client | null = null;
 
 function getS3(): S3Client {
   if (!_s3) {
+    const { endpoint, region, forcePathStyle } = resolveS3Config();
     _s3 = new S3Client({
-      region: "auto",
-      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      region,
+      endpoint,
+      forcePathStyle,
       credentials: {
         accessKeyId:     process.env.R2_ACCESS_KEY_ID!,
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
@@ -25,7 +28,7 @@ function getS3(): S3Client {
 }
 
 function cdnUrl(key: string): string {
-  return `${process.env.R2_PUBLIC_URL!.replace(/\/$/, "")}/${key}`;
+  return `${resolvePublicBase()}/${key}`;
 }
 
 function ext(contentType: string): string {

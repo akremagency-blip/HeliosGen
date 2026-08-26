@@ -368,7 +368,41 @@ Everything in `.env.example`, plus:
 
 Users supply their own kie.ai key through Settings, so no shared key is needed.
 
-### 6. Check it end to end
+### 6. Optional: keeping everything on the one box
+
+Neither hosted service is load-bearing in a way that forces you off your own
+hardware, but the trade is real.
+
+**Supabase.** Accounts and the database, nothing else — media never goes
+there. Both SQL files are plain Postgres plus `auth.users`, with nothing
+specific to the hosted product, so a self-hosted Supabase runs them unchanged.
+Run their Docker stack and point `NEXT_PUBLIC_SUPABASE_URL` at it. Budget
+**4 GB of RAM for that alone** — it is roughly ten containers sitting next to
+your app. The hosted free tier is genuinely less work if you are undecided.
+
+**Storage.** Set `S3_ENDPOINT` and any S3-compatible server takes over from
+R2 — MinIO, Garage, Backblaze. Path-style addressing switches on by itself.
+
+```bash
+S3_ENDPOINT=http://127.0.0.1:9000
+R2_ACCESS_KEY_ID=minioadmin
+R2_SECRET_ACCESS_KEY=minioadmin
+R2_BUCKET_NAME=heliosgen
+R2_PUBLIC_URL=https://cdn.yourdomain.com   # however you expose the bucket
+```
+
+Serving that bucket publicly is then your job: point a subdomain at MinIO
+through the same nginx, and remember the browser loads every gallery
+thumbnail from it.
+
+**What you cannot drop is authentication.** `GUEST_MODE` is the only path
+that runs without Supabase, and it returns the user id `"guest"` for every
+caller — one shared identity, one gallery, one API key, and every ownership
+check in the app reduced to a no-op. It is built for running locally by
+yourself. Deployed publicly, the first stranger who finds the URL sees your
+generations and spends your credits.
+
+### 7. Check it end to end
 
 Sign up (mail arrives), attach an image (no 413), start a generation, and watch
 it complete without a reload (SSE is getting through). If a job stays pending,
