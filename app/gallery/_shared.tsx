@@ -3,6 +3,7 @@
 // components both reach for. Split out so the leaf components could move into
 // their own files without importing the page component they used to sit under.
 import React from "react";
+import type { GalleryItem } from "@/lib/galleryUtils";
 
 export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
@@ -238,3 +239,242 @@ if (typeof window !== "undefined") {
   } catch {}
 }
 
+
+
+export function resolveGalleryMentions(
+  text: string,
+  tagged: TaggedImage[],
+  tagFormat: "default" | "grok" = "default",
+): { resolvedPrompt: string; extraUrls: string[]; extraAssets: { url: string; kind: "image" | "video" | "audio" }[] } {
+  if (!tagged.length) return { resolvedPrompt: text, extraUrls: [], extraAssets: [] };
+  type Span = { start: number; end: number; url: string; kind: "image" | "video" | "audio" };
+  const spans: Span[] = [];
+  const claimed = new Set<number>();
+  for (const t of [...tagged].sort((a, b) => b.label.length - a.label.length)) {
+    const escaped = t.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`@${escaped}(?!\\w)`, "g");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      if (!claimed.has(m.index)) {
+        spans.push({ start: m.index, end: m.index + m[0].length, url: t.url, kind: t.kind || "image" });
+        claimed.add(m.index);
+      }
+    }
+  }
+  spans.sort((a, b) => a.start - b.start);
+  if (!spans.length) return { resolvedPrompt: text, extraUrls: [], extraAssets: [] };
+  const extraUrls: string[] = [];
+  const extraAssets: { url: string; kind: "image" | "video" | "audio" }[] = [];
+  const seenUrlIndex = new Map<string, number>(); // url → 1-based slot already assigned
+  let resolvedPrompt = "";
+  let lastEnd = 0;
+  let n = 1;
+  for (const span of spans) {
+    resolvedPrompt += text.slice(lastEnd, span.start);
+    let slot: number;
+    if (seenUrlIndex.has(span.url)) {
+      slot = seenUrlIndex.get(span.url)!;
+    } else {
+      slot = n++;
+      seenUrlIndex.set(span.url, slot);
+      extraUrls.push(span.url);
+      extraAssets.push({ url: span.url, kind: span.kind });
+    }
+    resolvedPrompt += tagFormat === "grok" ? `@image${slot} ` : `<<<image ${slot}>>>`;
+    lastEnd = span.end;
+  }
+  resolvedPrompt += text.slice(lastEnd);
+  return { resolvedPrompt, extraUrls, extraAssets };
+}
+
+export function renderGalleryMentions(
+  text: string,
+  tagged: TaggedImage[],
+  onEnter: (tag: TaggedImage, rect: DOMRect) => void,
+  onLeave: () => void,
+  onMouseDown: (tag: TaggedImage) => void,
+): React.ReactNode {
+  if (!text) return null;
+  if (!tagged.length) return <span style={{ color: "#e8e8e6" }}>{text}</span>;
+
+  const sorted = [...tagged].sort((a, b) => b.label.length - a.label.length);
+  const parts: React.ReactNode[] = [];
+  let rest = text;
+  let key = 0;
+
+  while (rest.length > 0) {
+    let earliest: { idx: number; tag: TaggedImage } | null = null;
+    for (const tag of sorted) {
+      const idx = rest.indexOf(`@${tag.label}`);
+      if (idx !== -1 && (earliest === null || idx < earliest.idx)) earliest = { idx, tag };
+    }
+    if (!earliest) { parts.push(<span key={key++} style={{ color: "#e8e8e6" }}>{rest}</span>); break; }
+    if (earliest.idx > 0) parts.push(<span key={key++} style={{ color: "#e8e8e6" }}>{rest.slice(0, earliest.idx)}</span>);
+    const tag = earliest.tag;
+    parts.push(
+      <span
+        key={key++}
+        style={{
+          color: "#2DD4BF",
+          fontWeight: 500,
+          cursor: "text",
+          pointerEvents: "auto",
+          userSelect: "none",
+          background: "rgba(119,229,68,0.15)",
+          boxShadow: "0 0 0 3px rgba(119,229,68,0.15)",
+          borderRadius: "3px",
+        }}
+        onMouseEnter={e => onEnter(tag, e.currentTarget.getBoundingClientRect())}
+        onMouseLeave={onLeave}
+        onMouseDown={e => { e.preventDefault(); onMouseDown(tag); }}
+      >
+        @{tag.label}
+      </span>,
+    );
+    rest = rest.slice(earliest.idx + tag.label.length + 1);
+  }
+  return <>{parts}</>;
+}
+
+export function resizeTextarea(el: HTMLTextAreaElement, maxH = 264) {
+  const st = el.scrollTop;
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, maxH) + "px";
+  el.scrollTop = st;
+}
+
+export function mergeByNewest(prev: GalleryItem[], incoming: GalleryItem[]): GalleryItem[] {
+  const seen = new Set(prev.map(i => i.id));
+  const brandNew = incoming.filter(i => !seen.has(i.id));
+  if (brandNew.length === 0) return prev;
+  return [...prev, ...brandNew].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export function settingsKey(tab: Tab, folderId: string | null): string {
+  return folderId ? `nf-gallery-${tab}-folder-${folderId}` : `nf-gallery-${tab}`;
+}
+
+export function loadSettings(tab: Tab, folderId: string | null): Partial<SavedSettings> | null {
+  if (typeof window === "undefined") return null;
+  try { const r = localStorage.getItem(settingsKey(tab, folderId)); return r ? JSON.parse(r) : null; }
+  catch { return null; }
+}
+
+export function saveSettings(tab: Tab, folderId: string | null, s: SavedSettings) {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(settingsKey(tab, folderId), JSON.stringify(s)); } catch {}
+}
+
+/** Whether Azure is fully configured (provider + base URL + deployment) for a given model. */
+export function isAzureActiveForModel(modelId: string, azureResolutionOptions?: string[]): boolean {
+  if (typeof window === "undefined" || !azureResolutionOptions?.length) return false;
+  try {
+    const provider = JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie";
+    const base     = localStorage.getItem("aiui-azure-base-url") ?? "";
+    const deploy   = JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? "";
+    return provider === "azure" && !!base && !!deploy;
+  } catch { return false; }
+}
+
+export function removeTagAndRenumber(
+  removedRefId: string,
+  removedUrl: string | null,
+  currentTaggedImages: TaggedImage[],
+  currentPrompt: string,
+): { newTaggedImages: TaggedImage[]; newPrompt: string } {
+  const removedTag = currentTaggedImages.find(
+    t => t.refId === removedRefId || (removedUrl != null && t.url === removedUrl),
+  );
+  if (!removedTag) return { newTaggedImages: currentTaggedImages, newPrompt: currentPrompt };
+
+  const m = removedTag.label.match(/^([^\d]*)(\d+)$/);
+  if (!m) {
+    return {
+      newTaggedImages: currentTaggedImages.filter(t => t !== removedTag),
+      newPrompt: currentPrompt.replace(new RegExp(`@${removedTag.label}\\b`, 'g'), ''),
+    };
+  }
+
+  const prefix = m[1];
+  const removedN = parseInt(m[2]);
+
+  const newTaggedImages = currentTaggedImages
+    .filter(t => t !== removedTag)
+    .map(t => {
+      const tm = t.label.match(/^([^\d]*)(\d+)$/);
+      if (!tm || tm[1] !== prefix) return t;
+      const n = parseInt(tm[2]);
+      return n > removedN ? { ...t, label: `${prefix}${n - 1}` } : t;
+    });
+
+  // Remove the deleted tag from prompt, then renumber higher ones ascending
+  // (ascending order avoids regex collision: @image2→@image1 before @image3→@image2)
+  let newPrompt = currentPrompt.replace(new RegExp(`@${prefix}${removedN}\\b`, 'g'), '');
+
+  const higherNs = currentTaggedImages
+    .filter(t => t !== removedTag)
+    .flatMap(t => { const tm = t.label.match(/^([^\d]*)(\d+)$/); return tm && tm[1] === prefix && parseInt(tm[2]) > removedN ? [parseInt(tm[2])] : []; })
+    .sort((a, b) => a - b);
+
+  for (const n of higherNs) {
+    newPrompt = newPrompt.replace(new RegExp(`@${prefix}${n}\\b`, 'g'), `@${prefix}${n - 1}`);
+  }
+
+  return { newTaggedImages, newPrompt };
+}
+
+export function getDisplayOrder(arr: RefImage[], draggingId: string | null, overId: string | null): RefImage[] {
+  if (!draggingId || !overId || draggingId === overId) return arr;
+  const dragIdx = arr.findIndex(r => r.id === draggingId);
+  const overIdx = arr.findIndex(r => r.id === overId);
+  if (dragIdx === -1 || overIdx === -1) return arr;
+  const next = [...arr];
+  const [moved] = next.splice(dragIdx, 1);
+  next.splice(overIdx, 0, moved);
+  return next;
+}
+
+export function reorderAndRenumberTags(
+  _oldArr: RefImage[],
+  newArr: RefImage[],
+  prefix: string,
+  currentTaggedImages: TaggedImage[],
+  currentPrompt: string,
+): { newTaggedImages: TaggedImage[]; newPrompt: string } {
+  // Build label → RefImage mapping for the new order.
+  // @imageN is a positional reference to the Nth attached item; when the user
+  // reorders, we update the URL/refId behind each label rather than renaming
+  // labels in the prompt — that way resolveGalleryMentions produces extraUrls
+  // in the new order and <<<image N>>> in the resolved prompt matches the
+  // dragged position.
+  const labelToRef = new Map<string, RefImage>();
+  for (let i = 0; i < newArr.length; i++) {
+    labelToRef.set(`${prefix}${i + 1}`, newArr[i]);
+  }
+
+  let changed = false;
+  const newTaggedImages = currentTaggedImages.map(t => {
+    const ref = labelToRef.get(t.label);
+    if (!ref || ref.id === t.refId) return t;
+    changed = true;
+    return { ...t, refId: ref.id, url: ref.cdnUrl ?? ref.objectUrl };
+  });
+
+  if (!changed) return { newTaggedImages: currentTaggedImages, newPrompt: currentPrompt };
+  return { newTaggedImages, newPrompt: currentPrompt };
+}
+
+/**
+ * Reorder-drag state, shared with GalleryInner.
+ *
+ * A holder object rather than three module-level `let`s: an imported binding
+ * cannot be reassigned from another module, and every one of these is written
+ * from the drag handlers.
+ */
+export const reorderDrag: {
+  item: { id: string; listTarget: "refImage" | "resource" | "referenceVideo" | "audioRef" } | null;
+  /** last non-ghost item entered during a reorder drag */
+  overId: string | null;
+  /** set synchronously on drop, read in onClick to block an accidental preview */
+  justDropped: boolean;
+} = { item: null, overId: null, justDropped: false };

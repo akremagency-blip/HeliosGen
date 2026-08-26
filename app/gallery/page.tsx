@@ -22,8 +22,13 @@ import {
   snapWidth, thumbSrc,
   type DownloadTask, type KlingElement, type PendingGen,
   type RefImage, type SavedSettings, type Tab, type TaggedImage,
+  getDisplayOrder, isAzureActiveForModel, loadSettings, mergeByNewest,
+  removeTagAndRenumber, renderGalleryMentions, reorderAndRenumberTags,
+  reorderDrag, resizeTextarea, resolveGalleryMentions, saveSettings,
 } from "./_shared";
 import { GALLERY_CSS } from "./_gallery-css";
+import { DEMO_GALLERY_ITEMS, DEMO_VIDEO_ITEMS } from "./_demo-items";
+import { PendingGenTile } from "./_components/PendingGenTile";
 import { GalleryCard } from "./_components/GalleryCard";
 import { DownloadToast } from "./_components/DownloadToast";
 import { Lightbox } from "./_components/Lightbox";
@@ -35,700 +40,31 @@ import {
 } from "./_components/dropdowns";
 
 
-const DEMO_GALLERY_ITEMS: import("@/lib/galleryUtils").GalleryItem[] = [
-  {
-    id: "demo-1",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260421_160252_c4c544a7-07fb-4393-9449-3349e87fc597.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-04-21T16:02:52.000Z",
-    prompt: `Hyper-realistic game screenshot, next-gen AAA quality,
-photorealistic third-person action RPG,
-ultra-detailed open world environment,
 
-SCENE:
-ancient Greek mountain pass, winter overcast,
-heavy grey-white sky, diffuse cold light,
-no direct sun — soft flat winter shadows,
-broken Greek stone columns half-buried in snow,
-ruined stone archway carved with meander patterns,
-distant mountain peaks disappearing into grey haze,
-snow surface worn and dirty from battle,
-muddy boot prints, dark blood spots in snow,
-scattered broken arrows half-buried,
-volumetric cold mist low to ground,
-breath vapor rising from all characters,
-loose snow drifting across ground in wind,
-depth of field blur on distant mountains,
-film grain subtle overlay,
 
-PLAYER CHARACTER:
-male hunter-archer, lean muscular build,
-photorealistic skin — red nose, chapped lips,
-cold weathered face, scar on jaw,
-subsurface scattering on skin — cold blue undertone,
-worn leather and fur armor — realistic damage,
-bear fur pauldron matted and frost-damp,
-bronze bracers tarnished green-brown,
-quiver on back — arrows worn and real,
-bowstring fully drawn, aiming upward,
-one knee pressed deep into snow,
-snow packed into boot soles and knee,
-torn cloak edge fraying in wind,
-dark hair with small braids — wet and heavy,
-finger tendons white from bowstring tension,
-micro detail: sweat, dirt, frost on eyebrows,
-dynamic combat pose, motion blur on arrow,
 
-CYCLOPS BOSS:
-single massive Cyclops — 7 meters tall,
-Argos — Stone Titan,
-photorealistic stone-grey cracked skin,
-subsurface scattering on skin — cold tone,
-wounds and cracks from prior battle,
-dried blood on knuckles and arms,
-single biological eye — natural amber,
-no magic glow — real organic texture,
-crude armor from animal hides and rusted iron,
-each hide strap and buckle individually detailed,
-rusted chains as weapon — links individually rendered,
-mid-step forward — weight shift visible,
-snow compressing and cracking under foot,
-massive exhale breath cloud — animal scale,
-expression of focused predatory rage,
-muscle and tendon anatomy under skin,
-Nanite-level skin and armor detail,
 
-COMBAT MOMENT:
-arrow frozen mid-air leaving bowstring,
-real arrow physics — no magic trail,
-fletching blur from natural spin,
-arrowhead glinting in diffuse grey light,
-Cyclops single eye tracking the arrow,
-chains mid-swing natural motion blur,
-snow spray from last footstep impact,
-player absolutely still — breath held,
-cinematic frozen tension moment,
 
-LIGHTING:
-flat diffuse grey overcast sky light,
-cold blue-grey color temperature 6500K,
-snow reflecting ambient light upward as fill,
-natural rim on player from snow bounce,
-no god rays, no bloom, no lens flare,
-no artificial glow anywhere,
-ray-traced global illumination,
-path-traced shadows soft and natural,
-ACES filmic tone mapping,
-slightly desaturated — realistic winter palette,
-volumetric cold mist catching diffuse light,
-HDR subtle — no blown highlights,
-chromatic aberration very subtle on edges,
 
-CAMERA:
-slight low angle — player foreground left,
-Cyclops dominating center-right upper frame,
-grey overcast sky filling top third,
-anamorphic 2.39:1 framing,
-shallow depth of field — f/2.8,
-background mountains soft bokeh,
-no lens flare,
-feels exactly like paused real gameplay,
 
-TECHNICAL:
-Unreal Engine 5.3, Lumen GI, Nanite geometry,
-path-traced shadows, 4K resolution,
-photorealistic texture detail 16K,
-ray-traced ambient occlusion,
-film grain subtle, chromatic aberration minimal,
-anamorphic lens bokeh on background,
-16:9 aspect ratio game screenshot,
-God of War + Ghost of Tsushima + Horizon Zero Dawn visual fidelity`,
-  },
-  {
-    id: "demo-2",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260421_162100_a9cb557d-1397-42c1-ac16-499c09042ea5.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-04-21T16:21:00.000Z",
-    prompt: `Horizontal desktop landing page hero section for a fictional snowboard eyewear and mountain gear store called "APEX & SUMMIT" (placeholder). Cinematic sports-tech advertising aesthetic with extreme close-up athletic portrait, reflection-based storytelling, bold condensed voice-command headline, premium performance-brand layout. 16:9 desktop composition.
 
-Canvas: Full-width horizontal 16:9 desktop hero. Deep snow-white to soft icy-blue gradient background with subtle motion-blur snow particles drifting across the frame.
 
-Main hero image: An extreme close-up cinematic portrait of a young professional snowboarder — a woman with her hair pulled back tightly, visible small beads of melted snow on her temples and eyebrows, sun-kissed skin with a subtle athletic glow. She wears oversized performance snowboard goggles with a bold wraparound frame and large mirrored reflective lenses tinted in a vivid amber-gold to deep magenta gradient.
 
-Key storytelling element — the reflection in her goggles: Inside the mirrored lens surface, a sharp and detailed reflection of a dynamic snowboard action scene is visible — a snowboarder mid-air executing a jump off a pristine mountain ridge against bright blue sky, powder snow spraying out behind them, mountain peaks receding into the distance.
 
-Main headline (right side, massive bold condensed sans-serif):
-"HEY APEX / CUE MY / 'FIRST DESCENT' / PLAYLIST"
 
-Sub-headline: "Smart goggles for smarter runs."
 
-Palette: icy-blue and snow-white gradient background, warm amber-to-magenta reflective lens, natural sun-kissed skin tones, crisp white typography.
-Mood: high-performance athletic, premium technology-forward, cinematic commercial, aspirational mountain sport. Awwwards / Behance site-of-the-day premium sportswear landing page, 4k.`,
-  },
-  {
-    id: "demo-3",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260422_144420_5f74e1a3-ff9e-4f59-b8f8-799982bdd36b.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-04-22T14:44:20.000Z",
-    prompt: `Contemporary commercial lifestyle photograph, luxury snow-sports campaign aesthetic, Moncler × Prada Linea Rossa × Arc'teryx × Jacquemus Ski campaign style, authentic iPhone 16 Pro aesthetic.
 
-Hero concept: a playful commercial selfie moment — a young man and young woman, both snowboarders, pause mid-slope for an intimate joyful selfie where the woman photographs her own reflection in the massive mirrored lens of the man's ski goggles.
 
-Hero subject foreground: a handsome young man in his mid-twenties, slight stubble, confident relaxed expression with a small knowing smile, wearing a ski helmet and oversized chrome-mirrored ski goggles with a reflective silver-blue lens. He wears a vivid electric-orange puffer jacket with technical stitching details.
 
-Reflected in his mirrored goggle lens: the young woman photographer reflected perfectly, holding up an iPhone 16 Pro at arm's length. She wears a hot-pink and magenta gradient ski suit with retro 90s-inspired color-blocking, white ski helmet, long dark hair spilling out in two loose braids, huge bright smile. Behind her in the reflection: snowy alpine mountain peaks, bluebird sky, other skiers, a wooden chalet lodge in the distance.
 
-Color grading: punchy commercial palette with authentic iPhone computational photography signature — electric orange jacket popping aggressively against deep cobalt-blue sky, hot pink and magenta in the reflection, chrome silver-blue mirrored goggle lens.
-
-Shot on iPhone 16 Pro, Moncler × Prada Linea Rossa × Arc'teryx ski campaign aesthetic, joyful high-energy couple, clever conceptual selfie construction, ultra-detailed, vivid saturated alpine color palette.`,
-  },
-  {
-    id: "demo-4",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260422_211323_4cc2cdec-06a1-4d10-93b9-a63a44ae5d93.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-04-22T21:13:23.000Z",
-    prompt: `Surreal cinematic portrait photograph, shot on medium-format film camera (Mamiya 7 II or Pentax 67) with 80mm lens, Kodak Portra 400 film, soft natural Mediterranean afternoon daylight, dreamy painterly color grade with cool ocean blue background and warm earthy skin tones, surrealist documentary aesthetic, Ryan McGinley meets Slim Aarons coastal-dreamlike mood.
-
-A close-up surreal portrait of a young European man in his mid-twenties, captured from behind and slightly to the side at a three-quarter back angle. He's positioned just at the water's edge of a calm Mediterranean sea or coastal harbor.
-
-He has wet sun-bleached light golden-brown hair, slightly tousled and damp from swimming. A glimpse of his face in profile is visible — a sharp masculine cheekbone with light freckles and faint stubble along his jawline. His skin is sun-tanned warm honey-bronze with subtle red flush from the summer sun. A delicate thin gold chain necklace is just visible around his neck.
-
-Draped dramatically across the top of his head and tumbling down the side of his face is a freshly caught raw octopus — a real cephalopod with a soft pinkish-coral mantle sitting balanced on top of his hair like an absurd surreal hat, and multiple long muscular tentacles cascading downward in organic spiral curves. The tentacles are a beautiful gradient of warm amber, peachy-pink, and deep umber-brown tones, the underside revealing rows of perfect circular pale-cream suction cups.
-
-The background is the calm Mediterranean ocean — a vast soft gradient of pale azure-blue at the horizon transitioning into deeper teal-blue. Painterly medium-format film grain, soft Portra color rendering with natural saturation, dreamy surrealist coastal aesthetic.`,
-  },
-  {
-    id: "demo-5",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260422_213610_8f9804a3-5fce-48c0-94e0-5147ab7cf3fd.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-04-22T21:36:10.000Z",
-    prompt: `Horizontal desktop landing page for a fictional virtual outfit try-on service called "DRESSR" (placeholder). Full Y2K / PS2-era video game character select screen aesthetic. Low-poly 3D models, glossy translucent UI panels, aqua-cyan grid backgrounds, pixelated retro typography, chrome bevels.
-
-Background: A deep aqua-cyan gradient background with visible wireframe grid lines receding into perspective. Scanline overlay and slight CRT-monitor glow throughout.
-
-Left panel: A large glossy cyan-chrome-framed display panel containing a low-poly 3D avatar of a young woman standing in a neutral T-pose, rendered in early-2000s PS2 graphics style. She has long dark braided pigtails, wearing a pink cropped tank top, low-rise denim skirt with studded belt — classic Y2K outfit.
-
-Main headline (center, massive Y2K bubble-chrome 3D typography):
-"TRY / EVERYTHING."
-
-Right panel — Character roster grid: A massive glossy 3D glass panel with a 7×5 grid of small square portrait thumbnails — each showing a different low-poly 3D avatar wearing a different outfit.
-
-CTA buttons: Two large pill-shaped glossy 3D buttons:
-- Left (magenta-pink gradient): "▶ START FITTING"
-- Right (cyan-blue gradient): "HOW IT WORKS"
-
-Palette: deep aqua-cyan (#0A4A6B to #5BC0D8), bright magenta-pink (#FF3D8E), cyan highlights (#4FE5FF), chrome silver, pixel-green LCD.
-Mood: nostalgic Y2K video game, Sega Dreamcast meets Dance Dance Revolution meets early Flash-era web. Awwwards / Dribbble-quality Y2K revival landing page, 4k.`,
-  },
-  {
-    id: "demo-6",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260422_215112_09f9313d-4c93-40d5-8d5b-e6a502fa93c1.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-04-22T21:51:12.000Z",
-    prompt: `Ultra-realistic next-gen video game screenshot, PS5 gameplay capture, exactly like real game footage, Ghost of Tsushima / Rise of the Ronin quality, NO lens flare, NO bloom, NO light rays, NO glowing effects, natural neutral lighting, overcast bright day.
-
-SCENE — JAPANESE VILLAGE STREET COMBAT:
-traditional feudal Japan village, dirt road main street, wooden buildings both sides, merchant stalls, hanging cloth banners, barrels and crates scattered, civilians fleeing in background, dust kicked up from combat movement, overcast white sky — diffuse natural light, photorealistic wood and stone textures, mud on ground, footprints visible, broken pottery on ground.
-
-PLAYER CHARACTER back view center:
-female samurai, white and silver armor, clean practical design, no fantasy elements, katana raised in combat guard stance, normal gameplay posture — not cinematic pose, hair tied back practically, armor worn but functional, NO glow on weapons, NO energy effects, just steel catching normal daylight.
-
-ENEMIES:
-Enemy 1 (directly ahead 5m): ronin swordsman, grey clothing, brown worn armor, chipped katana, aggressive forward stance mid-attack, "浪人 Ronin" white name above head, red health bar.
-Enemy 2 (left flank): spear ashigaru running in, "足軽 Guard" name tag, yellow health bar.
-Enemy 3 (right): archer nocking arrow, "弓兵 Archer" name tag, green health bar.
-
-HUD — clean minimal flat game UI with HP bars, minimap, item slots, button prompts.
-
-OVERALL: feels 100% like real PS5 gameplay video, natural camera position, overcast flat natural lighting, every detail sharp and clear, Ghost of Tsushima gameplay screenshot level, 1920x1080 raw capture.`,
-  },
-  {
-    id: "demo-7",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260213_180040_5b054efc-50a9-4899-a36c-3505197b90f2.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-02-13T18:00:40.000Z",
-    prompt: `A fashion-forward full-body editorial shot captures a young woman standing indoors against a clean, plain off-white wall, styled in an eclectic, avant-garde street couture look. The camera is positioned at eye level, straight-on, allowing the entire outfit and silhouette to be clearly visible while maintaining a natural, documentary feel.
-
-She wears a cropped gray faux-fur jacket with a shaggy texture, structured with visible straps and metal buckles that add a utilitarian edge. Underneath, she wears a crisp white button-up shirt left partially open, paired with a patterned purple tie hanging loosely down the center. A low-rise gray skirt with a soft drape sits at the hips.
-
-She wears a black headscarf fitted tightly over short dark hair, paired with futuristic wraparound sunglasses. In her hand, she carries a structured gray handbag adorned with playful charms. On her feet are pointed-toe knee-high boots in a muted lavender-pink tone, detailed with straps, studs, and layered textures.
-
-The setting is minimal and uncluttered, with a simple wooden floor and a plain wall. Lighting is soft and natural, evenly illuminating the subject without harsh shadows.
-
-The overall mood is experimental, rebellious, and fashion-centric, blending Y2K influences, cyber-streetwear, and deconstructed tailoring. Color palette is built around cool grays, muted purples, soft pinks, black accents, and subtle metallic tones.`,
-  },
-  {
-    id: "demo-8",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260214_192051_a5f7769c-4e56-4d82-a9d5-cd2880c58439.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-02-14T19:20:51.000Z",
-    prompt: `A high-angle medium shot features a young East Asian woman, possibly in her early 20s, with a short, black bob hairstyle situated against a façade featuring large window blinds. She poses in an edgy outfit consisting of a glossy, deep brown leather bomber jacket with elastic cuffs, a white corset-style top, a red striped tie, and an asymmetric, black distressed denim skirt with a frayed hemline and visible seams. A large, riveted belt cinches her waist. She accessorizes with sparkling bracelets and a rectangular black handbag with a chain strap placed beside her.
-
-The background showcases a light beige stone step and wall, with a modern glass window to her right. The lighting is natural with a soft shadow, and the color palette is muted with dark and neutral tones. Captured digitally with deep focus, giving the setting a crisp and urban aesthetic reminiscent of fashion editorial photography.`,
-  },
-  {
-    id: "demo-9",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260218_130714_2430d3a3-b8b2-4c9e-894d-b29503ee12c0.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-02-18T13:07:14.000Z",
-    prompt: `A straight-on medium shot depicts a young Asian woman, approximately in her 20s, sitting against a distressed concrete wall backdrop. She has long straight blonde hair and wears clear glasses. Her attire includes a pinstriped button-up blouse with a tie scarf detail, paired with a short black skirt. Distinctive items in her outfit are her shiny black patent knee-high boots featuring wedge heels.
-
-The concrete wall behind her is aged and weathered, contributing to an industrial yet grunge atmosphere. The lighting is diffuse, seemingly natural ambient light filtering in, casting soft shadows and highlighting her smooth skin. The color palette consists of neutral tones, including her clothing and the beige of the concrete, with slight accents from her hair and glasses. The image emphasizes clarity in details yet maintains a slightly muted urban and edgy mood.`,
-  },
-  {
-    id: "demo-10",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260218_140039_e4358650-a940-43d9-90e6-3d07a9b9c7bd.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-02-18T14:00:39.000Z",
-    prompt: `A medium shot captures the midsection of a young woman with a fair skin tone, showcasing edgy, alternative fashion. Her attire features an oversized, distressed black knit crop top adorned with metallic pyramid studs forming an abstract pattern. She pairs it with high-waisted, loose-fitting gray denim pants adorned with a black belt matching silver studs, and stacks of metallic and black cuff bracelets on her wrists.
-
-The backdrop consists of a sheer white curtain, creating a minimalist, neutral setting. The lighting is soft and ambient, producing gentle shadows and highlights. The color palette is focused on blacks, grays, and metallics, conveying a modern and edgy atmosphere.`,
-  },
-  {
-    id: "demo-11",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/hf_20260218_142536_7eadd267-55c2-43b3-acb5-a748230ca3ad.png",
-    mediaType: "image",
-    model: "gpt-image-2",
-    quality: "medium",
-    source: "generation",
-    created_at: "2026-02-18T14:25:36.000Z",
-    prompt: `An overhead close-up shot captures the hands of an individual with light skin tone, showcasing long stiletto-shaped acrylic nails. The nails are a gradient of dusty pink, transitioning to beige tips, emphasizing an elongated and dramatic shape. The hands have visible tattoos, including intricate linework and geometric designs. Silver rings adorn fingers on both hands, adding a metallic contrast to the natural hues. The person's sleeves have a lace edge detail, contributing a delicate texture against the boldness of the nails.
-
-Lighting is soft and diffused, reducing shadows and lending the image a flat, almost clinical aesthetic. The color palette is predominantly neutral with beige, pink, and silver tones. The composition centers the hands against a plain, light gray backdrop, enhancing focus on the nail art and tattoos. The image is sharp with fine details on the skin and fabric textures, creating a bold and edgy atmosphere.`,
-  },
-];
-
-const DEMO_VIDEO_ITEMS: import("@/lib/galleryUtils").GalleryItem[] = [
-  {
-    id: "demo-v1",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/1.mp4",
-    mediaType: "video",
-    model: "Seedance 2.0",
-    source: "generation",
-    created_at: "2026-04-22T10:00:00.000Z",
-    prompt: `A young skateboarder in a black t-shirt and baggy jeans performs tricks at a brutalist concrete skatepark on a sunny afternoon. The camera alternates between a fisheye lens ground-level POV following his board and wider angles capturing kickflips and grinds. Harsh midday shadows, raw street-skating documentary style, warm golden tones.`,
-  },
-  {
-    id: "demo-v2",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/2.mp4",
-    mediaType: "video",
-    model: "Seedance 2.0",
-    source: "generation",
-    created_at: "2026-04-22T10:05:00.000Z",
-    prompt: `Extreme macro close-up of ornate stone chess pieces on a wooden chessboard inside a stylish mid-century modern living room. A hand reaches in to move a piece. The camera slowly descends to board level, revealing the intricate carved detail of a king and queen piece towering like monumental sculptures. Warm interior lighting, shallow depth of field, elegant product-cinematography aesthetic.`,
-  },
-  {
-    id: "demo-v3",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/3.mp4",
-    mediaType: "video",
-    model: "Seedance 2.0",
-    source: "generation",
-    created_at: "2026-04-22T10:10:00.000Z",
-    prompt: `A man in a dark hoodie stands in the center of a vast industrial facility filled with metal pipes and overhead fluorescent strip lights. His body begins to morph and assemble into a sleek dark robotic exosuit. The camera pulls back to reveal fallen mechanical wreckage on the floor around him. Dark sci-fi atmosphere, cold blue-grey tones, dramatic low-angle transformation sequence.`,
-  },
-  {
-    id: "demo-v4",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/4.mp4",
-    mediaType: "video",
-    model: "Seedance 2.0",
-    source: "generation",
-    created_at: "2026-04-22T10:15:00.000Z",
-    prompt: `Underwater close-up inside a planted freshwater aquarium. A piece of raw meat drifts down through the water. Two large piranhas with dark bodies and orange-red bellies surge forward and tear into the meat aggressively, pulling it apart. Driftwood and lush green aquatic plants fill the background. Crystal-clear water, nature-documentary macro photography, dramatic feeding behavior.`,
-  },
-  {
-    id: "demo-v5",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/5.mp4",
-    mediaType: "video",
-    model: "Seedance 2.0",
-    source: "generation",
-    created_at: "2026-04-22T10:20:00.000Z",
-    prompt: `Close-up portrait of a young woman with wavy honey-blonde hair walking on a city street at night. She holds a coffee cup in one hand and a smartphone in the other, looking at the screen with a pouty expression. She wears a navy blue and white striped athletic jacket. Out-of-focus city lights and car headlights create warm red and orange bokeh in the background. The camera slowly orbits around her face. Nighttime urban setting, shallow depth of field, warm skin tones lit by the phone screen glow, candid street photography style, cinematic close-up.`,
-  },
-  {
-    id: "demo-v6",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/6.mp4",
-    mediaType: "video",
-    model: "Seedance 2.0",
-    source: "generation",
-    created_at: "2026-04-22T10:25:00.000Z",
-    prompt: `Cinematic tracking shot following a young woman with long pink hair walking through a high school hallway lined with lockers. She wears a white cropped zip-up hoodie and carries a black backpack over one shoulder, looking down pensively. Other students move in the background. The camera slowly orbits from a front-facing medium shot to behind her as she continues walking. Warm tungsten overhead lighting, shallow depth of field, 2000s teen drama aesthetic, shot on anamorphic lens with subtle lens flares.`,
-  },
-  {
-    id: "demo-v7",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/7.mp4",
-    mediaType: "video",
-    model: "Seedance 2.0",
-    source: "generation",
-    created_at: "2026-04-22T10:30:00.000Z",
-    prompt: `Inside a sandy desert terrarium with dried branches and a small cactus, a large hairy tarantula and an orange scorpion converge on a piece of raw pink meat placed on the substrate. They grapple over the food in a tense confrontation. Warm overhead lighting, extreme macro close-up, nature-documentary tension, detailed textures of chitin and sand.`,
-  },
-  {
-    id: "demo-v8",
-    url: "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/demo-mode/8.mp4",
-    mediaType: "video",
-    model: "Seedance 2.0",
-    source: "generation",
-    created_at: "2026-04-22T10:35:00.000Z",
-    prompt: `A young woman with bright orange-red hair and chunky over-ear headphones sits at an airport terminal gate by a floor-to-ceiling window, eating sushi from a small plate. She wears a sporty racing-style jacket. Travelers pull luggage past her in the background. Natural daylight streams through the glass, casual candid moment, shallow depth of field, travel lifestyle aesthetic.`,
-  },
-];
-
-
-
-
-
-
-
-
-
-
-
-
-function resolveGalleryMentions(
-  text: string,
-  tagged: TaggedImage[],
-  tagFormat: "default" | "grok" = "default",
-): { resolvedPrompt: string; extraUrls: string[]; extraAssets: { url: string; kind: "image" | "video" | "audio" }[] } {
-  if (!tagged.length) return { resolvedPrompt: text, extraUrls: [], extraAssets: [] };
-  type Span = { start: number; end: number; url: string; kind: "image" | "video" | "audio" };
-  const spans: Span[] = [];
-  const claimed = new Set<number>();
-  for (const t of [...tagged].sort((a, b) => b.label.length - a.label.length)) {
-    const escaped = t.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`@${escaped}(?!\\w)`, "g");
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null) {
-      if (!claimed.has(m.index)) {
-        spans.push({ start: m.index, end: m.index + m[0].length, url: t.url, kind: t.kind || "image" });
-        claimed.add(m.index);
-      }
-    }
-  }
-  spans.sort((a, b) => a.start - b.start);
-  if (!spans.length) return { resolvedPrompt: text, extraUrls: [], extraAssets: [] };
-  const extraUrls: string[] = [];
-  const extraAssets: { url: string; kind: "image" | "video" | "audio" }[] = [];
-  const seenUrlIndex = new Map<string, number>(); // url → 1-based slot already assigned
-  let resolvedPrompt = "";
-  let lastEnd = 0;
-  let n = 1;
-  for (const span of spans) {
-    resolvedPrompt += text.slice(lastEnd, span.start);
-    let slot: number;
-    if (seenUrlIndex.has(span.url)) {
-      slot = seenUrlIndex.get(span.url)!;
-    } else {
-      slot = n++;
-      seenUrlIndex.set(span.url, slot);
-      extraUrls.push(span.url);
-      extraAssets.push({ url: span.url, kind: span.kind });
-    }
-    resolvedPrompt += tagFormat === "grok" ? `@image${slot} ` : `<<<image ${slot}>>>`;
-    lastEnd = span.end;
-  }
-  resolvedPrompt += text.slice(lastEnd);
-  return { resolvedPrompt, extraUrls, extraAssets };
-}
-
-
-function renderGalleryMentions(
-  text: string,
-  tagged: TaggedImage[],
-  onEnter: (tag: TaggedImage, rect: DOMRect) => void,
-  onLeave: () => void,
-  onMouseDown: (tag: TaggedImage) => void,
-): React.ReactNode {
-  if (!text) return null;
-  if (!tagged.length) return <span style={{ color: "#e8e8e6" }}>{text}</span>;
-
-  const sorted = [...tagged].sort((a, b) => b.label.length - a.label.length);
-  const parts: React.ReactNode[] = [];
-  let rest = text;
-  let key = 0;
-
-  while (rest.length > 0) {
-    let earliest: { idx: number; tag: TaggedImage } | null = null;
-    for (const tag of sorted) {
-      const idx = rest.indexOf(`@${tag.label}`);
-      if (idx !== -1 && (earliest === null || idx < earliest.idx)) earliest = { idx, tag };
-    }
-    if (!earliest) { parts.push(<span key={key++} style={{ color: "#e8e8e6" }}>{rest}</span>); break; }
-    if (earliest.idx > 0) parts.push(<span key={key++} style={{ color: "#e8e8e6" }}>{rest.slice(0, earliest.idx)}</span>);
-    const tag = earliest.tag;
-    parts.push(
-      <span
-        key={key++}
-        style={{
-          color: "#2DD4BF",
-          fontWeight: 500,
-          cursor: "text",
-          pointerEvents: "auto",
-          userSelect: "none",
-          background: "rgba(119,229,68,0.15)",
-          boxShadow: "0 0 0 3px rgba(119,229,68,0.15)",
-          borderRadius: "3px",
-        }}
-        onMouseEnter={e => onEnter(tag, e.currentTarget.getBoundingClientRect())}
-        onMouseLeave={onLeave}
-        onMouseDown={e => { e.preventDefault(); onMouseDown(tag); }}
-      >
-        @{tag.label}
-      </span>,
-    );
-    rest = rest.slice(earliest.idx + tag.label.length + 1);
-  }
-  return <>{parts}</>;
-}
-
-function resizeTextarea(el: HTMLTextAreaElement, maxH = 264) {
-  const st = el.scrollTop;
-  el.style.height = "auto";
-  el.style.height = Math.min(el.scrollHeight, maxH) + "px";
-  el.scrollTop = st;
-}
-
-
-let _reorderDragItem: { id: string; listTarget: "refImage" | "resource" | "referenceVideo" | "audioRef" } | null = null;
-let _reorderOverId: string | null = null; // last non-ghost item entered during reorder drag
-let _reorderJustDropped = false; // set synchronously in handleReorderDrop; read in onClick to block accidental preview open
-
-function mergeByNewest(prev: GalleryItem[], incoming: GalleryItem[]): GalleryItem[] {
-  const seen = new Set(prev.map(i => i.id));
-  const brandNew = incoming.filter(i => !seen.has(i.id));
-  if (brandNew.length === 0) return prev;
-  return [...prev, ...brandNew].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-}
-
-
-function settingsKey(tab: Tab, folderId: string | null): string {
-  return folderId ? `nf-gallery-${tab}-folder-${folderId}` : `nf-gallery-${tab}`;
-}
-
-function loadSettings(tab: Tab, folderId: string | null): Partial<SavedSettings> | null {
-  if (typeof window === "undefined") return null;
-  try { const r = localStorage.getItem(settingsKey(tab, folderId)); return r ? JSON.parse(r) : null; }
-  catch { return null; }
-}
-
-function saveSettings(tab: Tab, folderId: string | null, s: SavedSettings) {
-  if (typeof window === "undefined") return;
-  try { localStorage.setItem(settingsKey(tab, folderId), JSON.stringify(s)); } catch {}
-}
-
-/** Whether Azure is fully configured (provider + base URL + deployment) for a given model. */
-function isAzureActiveForModel(modelId: string, azureResolutionOptions?: string[]): boolean {
-  if (typeof window === "undefined" || !azureResolutionOptions?.length) return false;
-  try {
-    const provider = JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie";
-    const base     = localStorage.getItem("aiui-azure-base-url") ?? "";
-    const deploy   = JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? "";
-    return provider === "azure" && !!base && !!deploy;
-  } catch { return false; }
-}
-
-
-
-// ── Pending generation tile (needs hooks, must be a component) ────────────────
-
-function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void }) {
-  return (
-    <>
-      {/* Top radial glow — blue-emerald with slow pulse */}
-      <div style={{
-        position: "absolute", top: "-40%", left: "50%", transform: "translateX(-50%)",
-        width: "180%", height: "80%", pointerEvents: "none",
-        background: "radial-gradient(ellipse at 50% 20%, rgba(20,160,140,0.45) 0%, rgba(30,100,200,0.2) 40%, transparent 70%)",
-        animation: "pendingGlow 3s ease-in-out infinite",
-      }} />
-      {/* Top: phase label + cancel — same row, wraps to next line if too narrow */}
-      <div style={{
-        position: "absolute", top: 8, left: 8, right: 8,
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        flexWrap: "wrap", gap: "6px",
-        zIndex: 5,
-      }}>
-        {/* Phase pill */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: "6px",
-          height: "26px", padding: "0 10px", borderRadius: "999px",
-          background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)",
-          border: pg.prePending ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(45,212,191,0.25)",
-          pointerEvents: "none", flexShrink: 0,
-        }}>
-          {pg.prePending ? (
-            <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
-              <circle cx="5" cy="5" r="4" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
-              <path d="M5 1 A4 4 0 0 1 9 5" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          ) : (
-            <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
-              <circle cx="5" cy="5" r="4" stroke="rgba(45,212,191,0.25)" strokeWidth="1.5" />
-              <path d="M5 1 A4 4 0 0 1 9 5" stroke="#2DD4BF" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          )}
-          <span style={{ fontSize: "11px", color: pg.prePending ? "#888" : "#2DD4BF", fontWeight: 500 }}>
-            {pg.prePending ? "Pending" : "Generating…"}
-          </span>
-        </div>
-
-        {/* Cancel pill — only before generation starts */}
-        {pg.prePending && (
-          <button
-            onClick={onCancel}
-            style={{
-              flexShrink: 0,
-              display: "flex", alignItems: "center", gap: "5px",
-              height: "26px", padding: "0 10px", borderRadius: "999px",
-              background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)",
-              border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer",
-              transition: "background 140ms",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "rgba(0,0,0,0.58)")}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round">
-              <circle cx="12" cy="12" r="9" />
-              <path d="m6 6 12 12" />
-            </svg>
-            <span style={{ fontSize: "11px", color: "#ccc", fontWeight: 500 }}>Cancel</span>
-          </button>
-        )}
-      </div>
-
-      {/* Bottom: prompt */}
-      {pg.prompt && (
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "24px 10px 10px", background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%)" }}>
-          <p style={{ margin: 0, fontSize: "11px", color: "rgba(255,255,255,0.35)", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{pg.prompt}</p>
-        </div>
-      )}
-    </>
-  );
-}
-
-// ── Logged-out empty state ────────────────────────────────────────────────────
 
 
 
 
 // ── Tag renumbering helper ─────────────────────────────────────────────────────
 
-function removeTagAndRenumber(
-  removedRefId: string,
-  removedUrl: string | null,
-  currentTaggedImages: TaggedImage[],
-  currentPrompt: string,
-): { newTaggedImages: TaggedImage[]; newPrompt: string } {
-  const removedTag = currentTaggedImages.find(
-    t => t.refId === removedRefId || (removedUrl != null && t.url === removedUrl),
-  );
-  if (!removedTag) return { newTaggedImages: currentTaggedImages, newPrompt: currentPrompt };
 
-  const m = removedTag.label.match(/^([^\d]*)(\d+)$/);
-  if (!m) {
-    return {
-      newTaggedImages: currentTaggedImages.filter(t => t !== removedTag),
-      newPrompt: currentPrompt.replace(new RegExp(`@${removedTag.label}\\b`, 'g'), ''),
-    };
-  }
 
-  const prefix = m[1];
-  const removedN = parseInt(m[2]);
-
-  const newTaggedImages = currentTaggedImages
-    .filter(t => t !== removedTag)
-    .map(t => {
-      const tm = t.label.match(/^([^\d]*)(\d+)$/);
-      if (!tm || tm[1] !== prefix) return t;
-      const n = parseInt(tm[2]);
-      return n > removedN ? { ...t, label: `${prefix}${n - 1}` } : t;
-    });
-
-  // Remove the deleted tag from prompt, then renumber higher ones ascending
-  // (ascending order avoids regex collision: @image2→@image1 before @image3→@image2)
-  let newPrompt = currentPrompt.replace(new RegExp(`@${prefix}${removedN}\\b`, 'g'), '');
-
-  const higherNs = currentTaggedImages
-    .filter(t => t !== removedTag)
-    .flatMap(t => { const tm = t.label.match(/^([^\d]*)(\d+)$/); return tm && tm[1] === prefix && parseInt(tm[2]) > removedN ? [parseInt(tm[2])] : []; })
-    .sort((a, b) => a - b);
-
-  for (const n of higherNs) {
-    newPrompt = newPrompt.replace(new RegExp(`@${prefix}${n}\\b`, 'g'), `@${prefix}${n - 1}`);
-  }
-
-  return { newTaggedImages, newPrompt };
-}
-
-function getDisplayOrder(arr: RefImage[], draggingId: string | null, overId: string | null): RefImage[] {
-  if (!draggingId || !overId || draggingId === overId) return arr;
-  const dragIdx = arr.findIndex(r => r.id === draggingId);
-  const overIdx = arr.findIndex(r => r.id === overId);
-  if (dragIdx === -1 || overIdx === -1) return arr;
-  const next = [...arr];
-  const [moved] = next.splice(dragIdx, 1);
-  next.splice(overIdx, 0, moved);
-  return next;
-}
-
-function reorderAndRenumberTags(
-  _oldArr: RefImage[],
-  newArr: RefImage[],
-  prefix: string,
-  currentTaggedImages: TaggedImage[],
-  currentPrompt: string,
-): { newTaggedImages: TaggedImage[]; newPrompt: string } {
-  // Build label → RefImage mapping for the new order.
-  // @imageN is a positional reference to the Nth attached item; when the user
-  // reorders, we update the URL/refId behind each label rather than renaming
-  // labels in the prompt — that way resolveGalleryMentions produces extraUrls
-  // in the new order and <<<image N>>> in the resolved prompt matches the
-  // dragged position.
-  const labelToRef = new Map<string, RefImage>();
-  for (let i = 0; i < newArr.length; i++) {
-    labelToRef.set(`${prefix}${i + 1}`, newArr[i]);
-  }
-
-  let changed = false;
-  const newTaggedImages = currentTaggedImages.map(t => {
-    const ref = labelToRef.get(t.label);
-    if (!ref || ref.id === t.refId) return t;
-    changed = true;
-    return { ...t, refId: ref.id, url: ref.cdnUrl ?? ref.objectUrl };
-  });
-
-  if (!changed) return { newTaggedImages: currentTaggedImages, newPrompt: currentPrompt };
-  return { newTaggedImages, newPrompt: currentPrompt };
-}
 
 // ── Inner page ────────────────────────────────────────────────────────────────
 
@@ -1533,8 +869,8 @@ function GalleryInner() {
   useEffect(() => {
     if (!draggingId) return;
     const cancel = () => {
-      _reorderDragItem = null;
-      _reorderOverId = null;
+      reorderDrag.item = null;
+      reorderDrag.overId = null;
       setDraggingId(null);
       setReorderOverId(null);
     };
@@ -2451,14 +1787,14 @@ function GalleryInner() {
   }, [handleAddReference, modelId]);
 
   const handleReorderDrop = (targetId: string, listTarget: "refImage" | "resource" | "referenceVideo" | "audioRef") => {
-    const dragId = _reorderDragItem?.id;
-    _reorderDragItem = null;
-    _reorderOverId = null;
+    const dragId = reorderDrag.item?.id;
+    reorderDrag.item = null;
+    reorderDrag.overId = null;
     setReorderOverId(null);
     setDraggingId(null);
     if (!dragId || dragId === targetId) return;
-    _reorderJustDropped = true;
-    setTimeout(() => { _reorderJustDropped = false; }, 300);
+    reorderDrag.justDropped = true;
+    setTimeout(() => { reorderDrag.justDropped = false; }, 300);
 
     let oldArr: RefImage[];
     let setter: (fn: (prev: RefImage[]) => RefImage[]) => void;
@@ -3611,17 +2947,17 @@ function GalleryInner() {
           {/* ── Reference image thumbnails (Always visible, integrated) ── */}
           <div style={{ maxHeight: "200px", overflowY: "auto", borderBottom: "none" }}>
             {!isVideo && imgModel?.supportsImages && (hasRefImgs || canAddImgs) && (
-              <div style={{ padding: "14px 16px 0", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-start", paddingBottom: "14px" }} onPointerUp={() => { if (_reorderDragItem?.listTarget === "refImage") { _reorderDragItem = null; _reorderOverId = null; setDraggingId(null); setReorderOverId(null); } }}>
+              <div style={{ padding: "14px 16px 0", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-start", paddingBottom: "14px" }} onPointerUp={() => { if (reorderDrag.item?.listTarget === "refImage") { reorderDrag.item = null; reorderDrag.overId = null; setDraggingId(null); setReorderOverId(null); } }}>
                 {displayRefImages.map(img => {
                   const isRemoving = removingIds.has(img.id);
                   const isHovered = hoveredRefId === img.id;
                   const isDragging = draggingId === img.id;
                   return (
-                    <div key={img.id} onMouseDown={e => e.preventDefault()} onPointerDown={e => { if (refImages.length <= 1 || img.uploading || img.error) return; _reorderDragItem = { id: img.id, listTarget: "refImage" }; _reorderOverId = null; setDraggingId(img.id); }} onPointerEnter={() => { if (!_reorderDragItem || _reorderDragItem.id === img.id || _reorderDragItem.listTarget !== "refImage") return; _reorderOverId = img.id; setReorderOverId(img.id); }} onPointerUp={e => { const info = _reorderDragItem; if (!info || info.listTarget !== "refImage") return; e.stopPropagation(); if (_reorderOverId) e.preventDefault(); const target = _reorderOverId ?? img.id; handleReorderDrop(target, "refImage"); }} onMouseEnter={() => { if (!draggingId) setHoveredRefId(img.id); }} onMouseLeave={() => setHoveredRefId(null)} onClick={() => { if (_reorderJustDropped) { _reorderJustDropped = false; return; } if (!img.uploading && !img.error && !draggingId) setRefPreview({ url: img.objectUrl, mediaKind: "image" }); }} onDragOver={e => { if (!e.dataTransfer.types.includes("application/x-gallery-item")) return; e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; setDragOverSlotKey(`refimg-filled-${img.id}`); }} onDragLeave={() => setDragOverSlotKey(null)} onDrop={e => handleGalleryItemDrop(e, "refImage", "image")} style={{ position: "relative", width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", background: "#1A1C1F", flexShrink: 0, touchAction: refImages.length > 1 ? "none" : undefined, transition: "border 120ms, box-shadow 120ms, opacity 120ms", border: img.error ? "1px solid rgba(248,113,113,0.4)" : dragOverSlotKey === `refimg-filled-${img.id}` ? "2.5px solid #2DD4BF" : taggedImages.some(t => t.refId === img.id) ? "2.5px solid #10b981" : "1px solid rgba(255,255,255,0.08)", boxShadow: dragOverSlotKey === `refimg-filled-${img.id}` ? "0 0 0 3px rgba(45,212,191,0.25)" : undefined, cursor: (!img.uploading && !img.error) ? (refImages.length > 1 ? (draggingId === img.id ? "grabbing" : "grab") : "zoom-in") : "default", animation: isRemoving ? "none" : (isDragging ? "none" : "refImgIn 260ms cubic-bezier(0.16,1,0.3,1) backwards"), opacity: isDragging ? 0.3 : undefined, ...(isRemoving ? { transition: "opacity 170ms, transform 170ms", opacity: 0, transform: "translateY(-10px) scale(0.92)" } : {}) }}>
+                    <div key={img.id} onMouseDown={e => e.preventDefault()} onPointerDown={e => { if (refImages.length <= 1 || img.uploading || img.error) return; reorderDrag.item = { id: img.id, listTarget: "refImage" }; reorderDrag.overId = null; setDraggingId(img.id); }} onPointerEnter={() => { if (!reorderDrag.item || reorderDrag.item.id === img.id || reorderDrag.item.listTarget !== "refImage") return; reorderDrag.overId = img.id; setReorderOverId(img.id); }} onPointerUp={e => { const info = reorderDrag.item; if (!info || info.listTarget !== "refImage") return; e.stopPropagation(); if (reorderDrag.overId) e.preventDefault(); const target = reorderDrag.overId ?? img.id; handleReorderDrop(target, "refImage"); }} onMouseEnter={() => { if (!draggingId) setHoveredRefId(img.id); }} onMouseLeave={() => setHoveredRefId(null)} onClick={() => { if (reorderDrag.justDropped) { reorderDrag.justDropped = false; return; } if (!img.uploading && !img.error && !draggingId) setRefPreview({ url: img.objectUrl, mediaKind: "image" }); }} onDragOver={e => { if (!e.dataTransfer.types.includes("application/x-gallery-item")) return; e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; setDragOverSlotKey(`refimg-filled-${img.id}`); }} onDragLeave={() => setDragOverSlotKey(null)} onDrop={e => handleGalleryItemDrop(e, "refImage", "image")} style={{ position: "relative", width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", background: "#1A1C1F", flexShrink: 0, touchAction: refImages.length > 1 ? "none" : undefined, transition: "border 120ms, box-shadow 120ms, opacity 120ms", border: img.error ? "1px solid rgba(248,113,113,0.4)" : dragOverSlotKey === `refimg-filled-${img.id}` ? "2.5px solid #2DD4BF" : taggedImages.some(t => t.refId === img.id) ? "2.5px solid #10b981" : "1px solid rgba(255,255,255,0.08)", boxShadow: dragOverSlotKey === `refimg-filled-${img.id}` ? "0 0 0 3px rgba(45,212,191,0.25)" : undefined, cursor: (!img.uploading && !img.error) ? (refImages.length > 1 ? (draggingId === img.id ? "grabbing" : "grab") : "zoom-in") : "default", animation: isRemoving ? "none" : (isDragging ? "none" : "refImgIn 260ms cubic-bezier(0.16,1,0.3,1) backwards"), opacity: isDragging ? 0.3 : undefined, ...(isRemoving ? { transition: "opacity 170ms, transform 170ms", opacity: 0, transform: "translateY(-10px) scale(0.92)" } : {}) }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={thumbSrc(img.objectUrl, snapWidth(64))} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                       {isHovered && !img.uploading && !img.error && (
-                        <div onClick={e => { if (_reorderJustDropped || draggingId) { _reorderJustDropped = false; e.stopPropagation(); return; } e.stopPropagation(); setRefPreview({ url: img.objectUrl, mediaKind: "image" }); }} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-in" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></div>
+                        <div onClick={e => { if (reorderDrag.justDropped || draggingId) { reorderDrag.justDropped = false; e.stopPropagation(); return; } e.stopPropagation(); setRefPreview({ url: img.objectUrl, mediaKind: "image" }); }} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-in" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></div>
                       )}
                       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "8px 4px 3px", background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)", textAlign: "center" }}><span style={{ fontSize: "8px", fontWeight: 700, letterSpacing: "0.04em", color: "rgba(255,255,255,0.85)", textTransform: "uppercase" }}>Image</span></div>
                       {img.uploading && (<div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ width: "14px", height: "14px", borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "#2DD4BF", display: "inline-block", animation: "spin 0.75s linear infinite" }} /></div>)}
@@ -3704,7 +3040,7 @@ function GalleryInner() {
                 }
               }
               return (
-                <div style={{ padding: "14px 16px 14px", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-start" }} onPointerUp={() => { if (_reorderDragItem) { _reorderDragItem = null; _reorderOverId = null; setDraggingId(null); setReorderOverId(null); } }}>
+                <div style={{ padding: "14px 16px 14px", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-start" }} onPointerUp={() => { if (reorderDrag.item) { reorderDrag.item = null; reorderDrag.overId = null; setDraggingId(null); setReorderOverId(null); } }}>
                   {slots.map((slot, idx) => {
                     if (slot.kind === "element-filled") {
                       const el = slot.element; const thumb = el.imageUrls[0]; const hovId = `elem-${el.id}`;
@@ -3734,10 +3070,10 @@ function GalleryInner() {
                         const listForSlot = slot.target === "resource" ? vidResources : slot.target === "referenceVideo" ? vidRefVideos : vidRefAudios;
                         const isSlotDragging = draggingId === r.id;
                         return (
-                        <div key={r.id} onMouseDown={e => e.preventDefault()} onPointerDown={e => { if (!isMultiTarget || listForSlot.length <= 1 || r.uploading || r.error) return; _reorderDragItem = { id: r.id, listTarget: slot.target as "resource"|"referenceVideo"|"audioRef" }; _reorderOverId = null; setDraggingId(r.id); }} onPointerEnter={() => { if (!_reorderDragItem || _reorderDragItem.id === r.id || _reorderDragItem.listTarget !== slot.target) return; _reorderOverId = r.id; setReorderOverId(r.id); }} onPointerUp={e => { const info = _reorderDragItem; if (!info || info.listTarget !== slot.target) return; e.stopPropagation(); if (_reorderOverId) e.preventDefault(); const target = _reorderOverId ?? r.id; handleReorderDrop(target, slot.target as "resource"|"referenceVideo"|"audioRef"); }} onMouseEnter={() => { if (!draggingId) setHoveredRefId(hovId); }} onMouseLeave={() => setHoveredRefId(null)} onDragOver={e => { if (slot.mediaKind === "audio" || !e.dataTransfer.types.includes("application/x-gallery-item")) return; e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; setDragOverSlotKey(dragKey); }} onDragLeave={() => setDragOverSlotKey(null)} onDrop={e => { if (slot.mediaKind !== "audio") handleGalleryItemDrop(e, slot.target as NonNullable<typeof pickerTarget>, slot.mediaKind as "image" | "video"); }} style={{ position: "relative", width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", flexShrink: 0, background: "#1a1c1f", touchAction: (isMultiTarget && listForSlot.length > 1) ? "none" : undefined, transition: "border 120ms, box-shadow 120ms, opacity 120ms", border: r.error ? "1px solid rgba(248,113,113,0.4)" : dragOverSlotKey === dragKey ? "2.5px solid #2DD4BF" : taggedImages.some(t => t.refId === r.id) ? "2.5px solid #10b981" : "1px solid rgba(255,255,255,0.12)", boxShadow: dragOverSlotKey === dragKey ? "0 0 0 3px rgba(45,212,191,0.25)" : undefined, opacity: isSlotDragging ? 0.3 : undefined, cursor: (isMultiTarget && listForSlot.length > 1 && !r.uploading && !r.error) ? (draggingId === r.id ? "grabbing" : "grab") : undefined }}>
+                        <div key={r.id} onMouseDown={e => e.preventDefault()} onPointerDown={e => { if (!isMultiTarget || listForSlot.length <= 1 || r.uploading || r.error) return; reorderDrag.item = { id: r.id, listTarget: slot.target as "resource"|"referenceVideo"|"audioRef" }; reorderDrag.overId = null; setDraggingId(r.id); }} onPointerEnter={() => { if (!reorderDrag.item || reorderDrag.item.id === r.id || reorderDrag.item.listTarget !== slot.target) return; reorderDrag.overId = r.id; setReorderOverId(r.id); }} onPointerUp={e => { const info = reorderDrag.item; if (!info || info.listTarget !== slot.target) return; e.stopPropagation(); if (reorderDrag.overId) e.preventDefault(); const target = reorderDrag.overId ?? r.id; handleReorderDrop(target, slot.target as "resource"|"referenceVideo"|"audioRef"); }} onMouseEnter={() => { if (!draggingId) setHoveredRefId(hovId); }} onMouseLeave={() => setHoveredRefId(null)} onDragOver={e => { if (slot.mediaKind === "audio" || !e.dataTransfer.types.includes("application/x-gallery-item")) return; e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; setDragOverSlotKey(dragKey); }} onDragLeave={() => setDragOverSlotKey(null)} onDrop={e => { if (slot.mediaKind !== "audio") handleGalleryItemDrop(e, slot.target as NonNullable<typeof pickerTarget>, slot.mediaKind as "image" | "video"); }} style={{ position: "relative", width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", flexShrink: 0, background: "#1a1c1f", touchAction: (isMultiTarget && listForSlot.length > 1) ? "none" : undefined, transition: "border 120ms, box-shadow 120ms, opacity 120ms", border: r.error ? "1px solid rgba(248,113,113,0.4)" : dragOverSlotKey === dragKey ? "2.5px solid #2DD4BF" : taggedImages.some(t => t.refId === r.id) ? "2.5px solid #10b981" : "1px solid rgba(255,255,255,0.12)", boxShadow: dragOverSlotKey === dragKey ? "0 0 0 3px rgba(45,212,191,0.25)" : undefined, opacity: isSlotDragging ? 0.3 : undefined, cursor: (isMultiTarget && listForSlot.length > 1 && !r.uploading && !r.error) ? (draggingId === r.id ? "grabbing" : "grab") : undefined }}>
                           {slot.mediaKind === "image" ? <img src={thumbSrc(r.objectUrl, snapWidth(64))} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : slot.mediaKind === "video" ? <video src={r.objectUrl} autoPlay muted loop playsInline style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.04)" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>}
                           {hoveredRefId === hovId && !r.uploading && !r.error && slot.mediaKind !== "audio" && (
-                            <div onClick={() => { if (_reorderJustDropped || draggingId) { _reorderJustDropped = false; return; } setRefPreview({ url: r.objectUrl, mediaKind: slot.mediaKind }); }} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-in", zIndex: 1 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></div>
+                            <div onClick={() => { if (reorderDrag.justDropped || draggingId) { reorderDrag.justDropped = false; return; } setRefPreview({ url: r.objectUrl, mediaKind: slot.mediaKind }); }} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-in", zIndex: 1 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></div>
                           )}
                           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "8px 4px 3px", background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)", textAlign: "center" }}><span style={{ fontSize: "8px", fontWeight: 700, letterSpacing: "0.04em", color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", padding: "0 4px" }}>{slot.label.toUpperCase()}</span></div>
                           <button onClick={() => removeVidRef(r.id, slot.target)} style={{ position: "absolute", top: "3px", right: "3px", width: "16px", height: "16px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "background 120ms", zIndex: 2 }}><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
