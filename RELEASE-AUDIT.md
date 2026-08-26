@@ -1,13 +1,14 @@
 # HeliosGen — Pre-Release Audit
 
-Branch `security/prerelease-hardening`, 8 commits, `53 files changed, 3505 insertions(+), 17900 deletions(-)`.
+Branch `security/prerelease-hardening`, 12 commits.
 
 Everything below was verified by running it, not by reading it. Where a claim
 rests on a test, the command and its output are quoted.
 
-**Verdict: releasable.** Three release blockers and one arbitrary-file-read were
-found and fixed. Two known gaps remain, both documented at the end with their
-severity and remediation; neither blocks a launch.
+**Verdict: releasable.** Four release blockers and one arbitrary-file-read were
+found and fixed, and the two gaps this document originally deferred have since
+been closed. What remains is one architectural item and one judgement call,
+both in §6; neither blocks a launch.
 
 ---
 
@@ -17,10 +18,11 @@ severity and remediation; neither blocks a launch.
 |---|---|---|
 | Types | `npx tsc --noEmit` | clean |
 | Build | `pnpm run build` | clean |
-| Unit tests | `pnpm test` | 9/9 |
+| Unit tests | `pnpm test` | 14/14 |
 | Input/output loop | guest mode, production build | 17/17 |
 | Dependency audit | `pnpm audit --prod` | 0 vulnerabilities |
-| Lint | `npx eslint .` | 74 errors, 84 warnings — all pre-existing, see §6 |
+| Lint | `pnpm run lint` | 0 errors, 150 warnings — exits 0, see §5.5 |
+| Rate limits | live, against a running server | 429 at the configured boundary |
 
 ---
 
@@ -273,42 +275,101 @@ file on every read (capped at 500); per-request payload dumps that included
 
 ---
 
-## 6. Known gaps — accepted, not blocking
+### 5.5 Closed since the first draft
 
-**`job-status` and `job-stream` do not check ownership.** Anyone holding a
-`taskId` can read that job's status and result URL. With §4.4 fixed, task ids
-are no longer published anywhere, so exploiting this requires already possessing
-an opaque provider-generated id. Closing it properly means moving the SSE
-endpoint to cookie-based auth, because `EventSource` cannot set headers — that
-is a change to the core generation-polling path and was deliberately not
-attempted days before a release. **Recommended as the first post-launch fix.**
+**Job ownership.** `job-status` and `job-stream` accepted any `taskId` from
+anyone. This was deferred as needing surgery on the core polling path, because
+`EventSource` cannot set an Authorization header — but it did not.
+`@supabase/ssr` already keeps the session in cookies, and cookies ride along on
+`EventSource`, so both routes authenticate with no client change at all.
+Ownership needed one piece of plumbing: settling a job overwrote the only record
+of who owned it. A job with no recorded owner stays readable, so generations in
+flight survive the deploy.
 
-**No rate limiting anywhere.** Every authenticated route can be called in a
-loop. Generation spends the user's own credits, so the blast radius is mostly
-storage and CPU (`/api/thumb` runs sharp, `extract-frame` runs ffmpeg). Put a
-limiter in front of the media routes before you advertise widely.
+**Rate limiting.** `lib/rateLimit.ts`, a fixed window in a Map — no dependency
+for what a few lines do. Verified against a running server:
 
-**`.env.guest` once carried a live ngrok URL** containing a real IP
-(`217.217.246.2`). The working tree is clean, but it remains in git history.
-Rewrite history or accept it — no credential was exposed, only an address.
+```
+limit configured : 90 per minute
+accepted         : 90
+rate limited     : 6 (first 429 on request #91)
+Retry-After      : 60 seconds
+```
 
-**`jobEvents` is still in-process.** The polling fallback (§3.4) makes
-correctness topology-independent, but instant delivery still only happens when
-the callback and the stream land on the same instance. Redis pub/sub if that
-latency ever matters.
+Limits sit well above normal browsing (300/min for `thumb`, which the gallery
+fires once per tile); the full input/output loop still passes 17/17 with
+limiting on.
 
-**74 lint errors remain**, unchanged throughout. All are React Compiler
-strictness — `set-state-in-effect`, `refs`, declaration-order complaints inside
-callbacks that only run after mount. I chased the three that read like real
-temporal-dead-zone crashes; they are not live bugs.
+## 6. What is left
 
-**`app/gallery/page.tsx` is still 4,974 lines.** Down from 7,517 — the fifteen
-unrelated components behind it moved into `_shared.tsx`, `_gallery-css.ts` and
-`_components/`, verified as a pure move by diffing the line multiset. What
-remains is `GalleryInner` itself, a single ~4,000-line component. Untangling its
-state is a real project, not a pre-release task.
+### 6.1 `GalleryInner` is one 4,189-line component — measured, deliberately not split
 
----
+The fifteen unrelated components behind it already moved out (7,517 → 4,974
+lines in `page.tsx`). What remains is a single component, and it does not come
+apart mechanically. Measured rather than guessed:
+
+```
+owned state/refs: 105
+total references across owned state: 1694 | median uses: 10
+
+most entangled:
+  117  state prompt
+   81  state modelId
+   68  state items
+   48  state vidResources
+   47  state submitting
+
+referenced 3 times or fewer (candidates for extraction):
+  -> 12 of 105   (all of them DOM handles and timer refs, not state)
+```
+
+There are no separable islands. Every meaningful piece of state is referenced
+about ten times across the body, so lifting any cluster into a hook means
+threading ten-plus values back through props — which makes the code worse, not
+better. The real fix is moving this state into the zustand store the workflow
+side already uses, incrementally. That is a project, and it buys the user
+nothing, so it is not a pre-release task.
+
+### 6.2 A live ngrok URL remains in git history — a decision, not a task
+
+`.env.guest` once carried a real tunnel address containing an IP
+(`217.217.246.2`). The working tree is clean; history is not.
+
+**Recommendation: accept it.** No credential was ever committed — a
+full-history scan for key prefixes, JWTs and PEM blocks returns nothing. This is
+an address, on a tunnel that is long dead. Rewriting the history of a public
+repository with merged contributor pull requests rewrites every commit hash and
+breaks every existing clone, which is a real cost paid by other people. If you
+disagree, the rewrite is one `git filter-repo` invocation and should happen
+before any further pushes, not after.
+
+### 6.3 Deliberate ceilings, marked in the code
+
+Three shortcuts are load-bearing enough to name. Each carries a `ponytail:`
+comment at its site saying what it gives up and what replaces it.
+
+- **Rate limiting is per-instance and in-memory.** N replicas allow N times the
+  limit, and a restart forgets everything. Right for stopping a runaway loop,
+  wrong for metering a paid API. Redis when the number must be exact.
+- **`jobEvents` is still in-process.** The 10-second poll makes correctness
+  independent of topology, but instant delivery only happens when the callback
+  and the stream land on the same instance.
+- **`isBlockedHost` checks literal hosts.** A hostname whose DNS resolves to a
+  private address still gets through; closing that needs resolve-then-pin on a
+  custom agent. Every caller is authenticated, which is what actually keeps
+  these routes from being an open relay.
+
+### 6.4 150 lint warnings
+
+Zero errors — `pnpm run lint` exits 0 and can gate CI. Of the original 74
+errors, eight were real and are fixed; the other 66 are React Compiler rules
+(`set-state-in-effect`, `refs`, `preserve-manual-memoization`,
+`immutability`) across ten component files, demoted to warnings with the
+reasoning recorded in `eslint.config.mjs`. They flag patterns the compiler
+cannot optimise, not defects — the three that read like temporal-dead-zone
+crashes each traced to a declaration-order complaint inside a callback that only
+runs after mount. Worth working down deliberately; not worth restructuring
+working effects under release pressure.
 
 ## 7. Before you deploy
 
