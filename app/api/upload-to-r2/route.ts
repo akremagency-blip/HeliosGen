@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { UnsupportedMediaError } from "@/lib/mediaMetadata";
 import { uploadDataUrl, mirrorToR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
@@ -63,7 +64,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ cdnUrl });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    if (e instanceof UnsupportedMediaError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    // The raw message is an internal detail — ffmpeg's includes the temp
+    // path it was handed. Log it, return something the user can act on.
+    console.error("[upload-to-r2]", e);
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

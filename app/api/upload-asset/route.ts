@@ -14,10 +14,12 @@
  *   4. Return CDN URL
  */
 import { NextRequest, NextResponse } from "next/server";
+import { UnsupportedMediaError } from "@/lib/mediaMetadata";
 import { uploadBuffer } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
+import { callerKey, rateLimit, tooMany } from "@/lib/rateLimit";
 
 export const maxDuration = 60;
 
@@ -39,12 +41,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "File exceeds 100 MB limit" }, { status: 413 });
     }
 
+    // The upload ran before the session was consulted, and the session only
+    // decided whether to record the row — so an anonymous caller could write
+    // into the bucket at will. Gate first, upload second.
+    const userId = await resolveUserId(req);
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const gate = rateLimit(callerKey(req, userId) + ":upload", 90, 60_000);
+    if (!gate.ok) return tooMany(gate) as unknown as NextResponse;
+
     // ── Upload to R2 (Deduplication happens inside uploadBuffer) ──────────────
     const folder  = mimeType.startsWith("video/") ? "references" : "uploads";
     const cdnUrl  = await uploadBuffer(buffer, mimeType, folder);
 
-    const userId = await resolveUserId(req);
-    if (userId) {
+    {
       if (GUEST_MODE) {
         guestDb.insertUpload({ user_id: userId, r2_url: cdnUrl, mime_type: mimeType, source: "user_upload" });
       } else {
@@ -61,7 +71,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ cdnUrl });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    if (e instanceof UnsupportedMediaError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    // The raw message is an internal detail — ffmpeg's includes the temp
+    // path it was handed. Log it, return something the user can act on.
+    console.error("[upload-asset]", e);
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

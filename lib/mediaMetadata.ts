@@ -7,10 +7,26 @@ import sharp from "sharp";
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * The file was not decodable. Carries no detail from the decoder: ffmpeg
+ * reports failure by echoing the whole command, which includes the temp
+ * paths we just wrote the upload to.
+ */
+export class UnsupportedMediaError extends Error {
+  constructor(message = "Unsupported or corrupt media file") {
+    super(message);
+    this.name = "UnsupportedMediaError";
+  }
+}
+
 /** Strip EXIF/IPTC/XMP (images) or metadata tags (video) from a buffer before storage. */
 export async function stripMetadata(buffer: Buffer, contentType: string): Promise<Buffer> {
   if (contentType.startsWith("image/")) {
-    return sharp(buffer).toBuffer();
+    try {
+      return await sharp(buffer).toBuffer();
+    } catch {
+      throw new UnsupportedMediaError("Unsupported or corrupt image file");
+    }
   }
   if (contentType.startsWith("video/")) {
     const extension = contentType.includes("webm") ? "webm" : "mp4";
@@ -19,12 +35,18 @@ export async function stripMetadata(buffer: Buffer, contentType: string): Promis
     const outputPath = join(tmpDir, `output.${extension}`);
     try {
       await writeFile(inputPath, buffer);
-      await execFileAsync("ffmpeg", [
-        "-i", inputPath,
-        "-map_metadata", "-1",
-        "-c", "copy",
-        "-y", outputPath,
-      ]);
+      try {
+        await execFileAsync("ffmpeg", [
+          "-i", inputPath,
+          "-map_metadata", "-1",
+          "-c", "copy",
+          "-y", outputPath,
+        ]);
+      } catch {
+        // Storing the original instead would keep the GPS tags this exists
+        // to remove, so an unreadable file is refused rather than passed on.
+        throw new UnsupportedMediaError("Unsupported or corrupt video file");
+      }
       return await readFile(outputPath);
     } finally {
       await Promise.all([
