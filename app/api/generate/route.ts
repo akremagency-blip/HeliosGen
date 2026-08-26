@@ -169,9 +169,12 @@ async function curlMultipartPost(
 }
 
 // Resolve every image URL to an R2 CDN URL (uploads base64 / mirrors external URLs)
+/** The highest maxImages any model declares (nano-banana-2). */
+const MAX_REFERENCE_IMAGES = 14;
+
 async function resolveImages(imageUrls: string[]): Promise<string[]> {
   const resolved = await Promise.all(
-    imageUrls.slice(0, 14).map((u) => ensureR2(u, "references").catch(() => null))
+    imageUrls.slice(0, MAX_REFERENCE_IMAGES).map((u) => ensureR2(u, "references").catch(() => null))
   );
   return resolved.filter((u): u is string => u !== null);
 }
@@ -289,25 +292,33 @@ export async function POST(req: NextRequest) {
     debugOnly?:          boolean;
   };
 
-  if (debugOnly) {
-    const body = { model, prompt, imageUrls, aspectRatio, quality, azureQuality, azureResolution, azureCustomWidth, azureCustomHeight };
-    console.log("[DEBUG] generate payload:", JSON.stringify(body, null, 2));
-    return NextResponse.json({ ok: true });
-  }
 
   if (!prompt?.trim()) return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
 
   const cfg = IMAGE_MODELS.find((m) => m.id === model);
   if (!cfg) return NextResponse.json({ error: `Unknown model: ${model}` }, { status: 400 });
 
-  let r2ImageUrls: string[] = [];
-  try {
-    r2ImageUrls = await resolveImages(imageUrls);
-  } catch {
-    // image mirroring failures are non-fatal — proceed without reference images
+  // resolveImages swallows each failure individually, so the old catch here
+  // could never fire and a dropped reference was invisible: the user attached
+  // images, the generation ignored them, and the credits were spent anyway.
+  // A wrong image costs the same as a right one, so this fails instead.
+  const requested = imageUrls.slice(0, MAX_REFERENCE_IMAGES).length;
+  const r2ImageUrls = await resolveImages(imageUrls);
+  if (requested > 0 && r2ImageUrls.length < requested) {
+    const lost = requested - r2ImageUrls.length;
+    return NextResponse.json({
+      error: `${lost} of ${requested} reference image${requested === 1 ? "" : "s"} could not be loaded. Re-attach ${lost === 1 ? "it" : "them"} and try again.`,
+    }, { status: 400 });
   }
 
   const currentUserId = await resolveUserId(req).catch(() => null);
+
+  if (debugOnly && (azureBaseUrl || codexProvider)) {
+    return NextResponse.json({
+      debugPayload: null,
+      debugEndpoint: azureBaseUrl ? "azure" : "codex",
+    });
+  }
 
   // ── Azure Foundry branch ──────────────────────────────────────────────────────
   if (azureBaseUrl && azureDeployment) {
@@ -540,8 +551,15 @@ export async function POST(req: NextRequest) {
     const hasImages = r2ImageUrls.length > 0;
     const resolvedApiId = !hasImages && cfg.textOnlyApiId ? cfg.textOnlyApiId : cfg.apiId;
 
+    // A dual-mode model can cap the text-only endpoint lower than the
+    // image-to-image one, and the composer already enforces that number.
+    // Truncating at the wider limit here left the two disagreeing.
+    const promptLimit = !hasImages && cfg.textOnlyApiId
+      ? (cfg.textOnlyPromptMaxLength ?? apiInput.promptMaxLength)
+      : apiInput.promptMaxLength;
+
     const input: Record<string, unknown> = {
-      prompt:                    prompt.slice(0, apiInput.promptMaxLength),
+      prompt:                    prompt.slice(0, promptLimit),
       [apiInput.aspectRatioKey]: aspectRatio,
     };
 
@@ -555,6 +573,10 @@ export async function POST(req: NextRequest) {
     if (apiInput.extra) Object.assign(input, apiInput.extra);
 
     const requestBody = { model: resolvedApiId, callBackUrl, input };
+
+    if (debugOnly) {
+      return NextResponse.json({ debugPayload: requestBody, debugEndpoint: CREATE });
+    }
 
     const res = await fetch(CREATE, {
       method:  "POST",

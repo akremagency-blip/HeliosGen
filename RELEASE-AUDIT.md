@@ -459,7 +459,68 @@ video through the button's actual path, re-attach to prove dedup, attach a
 corrupt file, and read the result back to confirm it decodes and that EXIF was
 stripped rather than passed through.
 
-## 8. Before you deploy
+## 8. Third pass — every model, and the reference images
+
+All 9 image models and all 15 video models were driven through payload
+assembly and checked against their own catalog entry: api id, aspect-ratio
+key, quality mapping, reference-image key, and a signed callback URL.
+**28/28 assemble correctly**, including the three dual-mode models switching
+between their text-to-image and image-to-image endpoints, and the Veo family's
+separate flat payload against `/api/v1/veo/generate`.
+
+### 8.1 A dropped reference image was invisible
+
+`resolveImages` mirrors each reference into storage with a per-image
+`.catch(() => null)` and filters the failures out, so the `try/catch` around
+it could never fire. Attach four images, have one fail to mirror, and the
+generation ran against the remaining three — or against none — with no
+warning. The credits were spent either way and the output silently ignored
+what the user asked for.
+
+It now returns 400 naming how many were lost. Failing is the kinder option
+here: a wrong image costs exactly as much as a right one, and a retry is
+cheap where a re-generation is not.
+
+### 8.2 debugOnly on the image route assembled nothing
+
+It returned `{ ok: true }` before the model was even looked up, so it could
+not catch a wrong api id, a bad aspect-ratio key or a broken quality map —
+the only reasons to have it. It now returns the real payload like the video
+route does, which is what made the sweep above possible without spending a
+single credit.
+
+### 8.3 A dual-mode model ignored its own text-only prompt limit
+
+`grok-imagine-image` caps text-to-image at 5,000 characters and
+image-to-image at 390,000. The composer enforced the right one; the route
+truncated at `apiInput.promptMaxLength` regardless, so the two disagreed.
+Only reachable outside the UI, but they should not disagree.
+
+### 8.4 Checked and found sound
+
+- **Catalog integrity** — `lib/modelConfig.test.ts` is new and covers unique
+  ids, no image/video id collisions, defaults that are members of their own
+  option lists, required handles that exist, and duration bounds.
+- **`ratios: []` on the motion-control models** is deliberate: they derive the
+  ratio from the start frame and reference video, and both call sites hide the
+  picker on `ratios.length > 0`.
+- **`auto` / `Auto` / `adaptive`** are spelled three ways across the catalog.
+  Every parser guards numerically and falls through correctly, so this is
+  cosmetic rather than a defect.
+- **Node registration** matches between the canvas and the public viewer;
+  the input nodes are absent from the add menu by way of an explicit
+  `HIDDEN_FROM_MENU`, because they are created by dropping a file.
+
+### 8.5 Not verifiable here
+
+The assistant's model ids in `lib/models.ts` are passed to kie.ai verbatim.
+kie.ai authenticates before it validates the model — a deliberately nonsense
+path returns the same 401 as a real one — so they cannot be checked without a
+key. Two of them, `claude-opus-4-7` and `claude-sonnet-4-6`, match no released
+Anthropic model; `claude-haiku-4-5` in the same list is real. Worth one
+authenticated call before release.
+
+## 9. Before you deploy
 
 1. **Set `CALLBACK_SECRET`** (`openssl rand -hex 32`) if you want the webhook
    secret independent of your kie.ai key. Optional — it derives one otherwise.
