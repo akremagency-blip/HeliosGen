@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { originAllowed } from "@/lib/safeUrl";
+import { callerKey, rateLimit, tooMany } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const url = searchParams.get("url");
   const wParam = Number(searchParams.get("w") ?? "384");
+
+  // sharp decodes and re-encodes on every miss. The gallery legitimately
+  // fires one per tile, so this is set well above normal browsing.
+  const gate = rateLimit(callerKey(req, null) + ":thumb", 300, 60_000);
+  if (!gate.ok) return tooMany(gate) as unknown as NextResponse;
 
   if (!url) return new NextResponse("Missing url", { status: 400 });
   if (!R2_BASE || !originAllowed(url, [R2_BASE])) {

@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadBuffer } from "@/lib/r2";
 import { resolveUserId } from "@/lib/guestMode";
 import { fetchGuarded, readCapped, isBlockedUrlError } from "@/lib/safeUrl";
+import { callerKey, rateLimit, tooMany } from "@/lib/rateLimit";
 import { writeFile, readFile, unlink, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -26,9 +27,13 @@ export async function POST(req: NextRequest) {
 
   try {
     // Was anonymous — same exposure as /api/extract-frame.
-    if (!(await resolveUserId(req))) {
+    const userId = await resolveUserId(req);
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const gate = rateLimit(callerKey(req, userId) + ":trim", 15, 60_000);
+    if (!gate.ok) return tooMany(gate);
 
     const { videoUrl, startTime, endTime } = await req.json();
 

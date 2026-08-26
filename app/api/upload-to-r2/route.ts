@@ -3,6 +3,7 @@ import { uploadDataUrl, mirrorToR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
+import { callerKey, rateLimit, tooMany } from "@/lib/rateLimit";
 
 // The folder lands in the R2 object key, so it is not the client's to choose.
 const FOLDERS = new Set(["uploads", "references", "images", "videos"]);
@@ -32,6 +33,9 @@ export async function POST(req: NextRequest) {
     // into our bucket, with mirrorToR2 doubling as a server-side fetcher.
     const userId = await resolveUserId(req);
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const gate = rateLimit(callerKey(req, userId) + ":upload", 90, 60_000);
+    if (!gate.ok) return tooMany(gate) as unknown as NextResponse;
 
     let cdnUrl: string;
     if (dataUrl.startsWith("data:")) {

@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadBuffer } from "@/lib/r2";
 import { resolveUserId } from "@/lib/guestMode";
 import { fetchGuarded, readCapped, isBlockedUrlError } from "@/lib/safeUrl";
+import { callerKey, rateLimit, tooMany } from "@/lib/rateLimit";
 import { writeFile, readFile, unlink, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -27,9 +28,14 @@ export async function POST(req: NextRequest) {
   try {
     // Was anonymous: an unauthenticated fetch of any URL, written to disk and
     // fed to ffmpeg — SSRF plus a free way to fill the disk and pin the CPU.
-    if (!(await resolveUserId(req))) {
+    const userId = await resolveUserId(req);
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Each call downloads a video and runs ffmpeg over it.
+    const gate = rateLimit(callerKey(req, userId) + ":frame", 30, 60_000);
+    if (!gate.ok) return tooMany(gate);
 
     const { videoUrl, timeSeconds = 0, lastFrame = false } = await req.json();
 

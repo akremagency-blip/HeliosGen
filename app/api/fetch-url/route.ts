@@ -10,6 +10,7 @@ import { uploadBuffer } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
 import { fetchGuarded, readCapped, isBlockedUrlError } from "@/lib/safeUrl";
+import { callerKey, rateLimit, tooMany } from "@/lib/rateLimit";
 import * as guestDb from "@/lib/guest/db";
 
 export const maxDuration = 60;
@@ -22,6 +23,9 @@ export async function POST(req: NextRequest) {
     // choosing and bank the result in our R2.
     const userId = await resolveUserId(req);
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const gate = rateLimit(callerKey(req, userId) + ":fetch-url", 40, 60_000);
+    if (!gate.ok) return tooMany(gate) as unknown as NextResponse;
 
     const { url } = await req.json() as { url?: string };
     if (!url || typeof url !== "string") {
