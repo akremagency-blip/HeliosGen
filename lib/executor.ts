@@ -35,16 +35,23 @@ export function topoSort(nodes: Node<NodeData>[], edges: Edge[]): string[] {
   return order;
 }
 
-/** Returns waves of generation node IDs in dependency order.
- *  Nodes in the same wave have no inter-dependencies and run in parallel.
- *  Each wave must complete before the next starts. */
-export function buildPipelineWaves(nodes: Node<NodeData>[], edges: Edge[]): string[][] {
+/** Waves of generation node IDs in dependency order. Nodes in the same wave
+ *  have no inter-dependencies and run in parallel; each wave must complete
+ *  before the next starts.
+ *
+ *  `cyclic` holds nodes that can never be scheduled because they depend on each
+ *  other. They used to be dropped on the floor, so a looped graph just ran a
+ *  short pipeline and said nothing. */
+export function buildPipelineWaves(
+  nodes: Node<NodeData>[],
+  edges: Edge[],
+): { waves: string[][]; cyclic: string[] } {
   const genIds = new Set(
     nodes
       .filter(n => n.type === "generateNode" || n.type === "videoGeneratorNode")
       .map(n => n.id)
   );
-  if (genIds.size === 0) return [];
+  if (genIds.size === 0) return { waves: [], cyclic: [] };
 
   // Only edges between gen nodes affect ordering
   const deps = new Map<string, Set<string>>();
@@ -61,11 +68,12 @@ export function buildPipelineWaves(nodes: Node<NodeData>[], edges: Edge[]): stri
     const wave = [...remaining].filter(id =>
       [...(deps.get(id) ?? [])].every(dep => !remaining.has(dep))
     );
-    if (wave.length === 0) break; // cycle guard
+    // Nothing schedulable but nodes left over — the rest form a cycle.
+    if (wave.length === 0) break;
     waves.push(wave);
     for (const id of wave) remaining.delete(id);
   }
-  return waves;
+  return { waves, cyclic: [...remaining] };
 }
 
 const FRAME_OUT_HANDLES = new Set(["startFrameOut", "endFrameOut", "imagePickOut"]);

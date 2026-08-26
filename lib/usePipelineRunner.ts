@@ -31,7 +31,13 @@ export function usePipelineRunner(scopeNodeIds?: string[]) {
     const { nodes, edges } = useWorkflowStore.getState();
     const scope = scopeRef.current;
     const filteredNodes = scope ? nodes.filter(n => scope.includes(n.id)) : nodes;
-    const waves = buildPipelineWaves(filteredNodes, edges);
+    const { waves, cyclic } = buildPipelineWaves(filteredNodes, edges);
+    if (cyclic.length > 0) {
+      useWorkflowStore.getState().addToast(
+        `${cyclic.length} node${cyclic.length > 1 ? "s" : ""} skipped — they depend on each other in a loop.`,
+        "error",
+      );
+    }
     if (waves.length === 0) return;
 
     // Mark future-wave nodes as queued so they show a waiting indicator
@@ -61,6 +67,11 @@ export function usePipelineRunner(scopeNodeIds?: string[]) {
     const { waves, waveIdx, waveStarted } = pipeline;
     const currentWave = waves[waveIdx];
 
+    // This effect re-runs on every node change — a keystroke in any prompt. The
+    // two scans below were nodes.find() per wave member, so O(wave x nodes)
+    // each time. One index, reused.
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+
     // Trigger the wave
     if (!waveStarted) {
       waveEverActive.current = false;
@@ -76,7 +87,7 @@ export function usePipelineRunner(scopeNodeIds?: string[]) {
     // This prevents a race where pendingGenerate is cleared before generate()
     // sets status:"pending", causing the runner to think the wave is already done.
     const anyActive = currentWave.some(id => {
-      const node = nodes.find(n => n.id === id);
+      const node = byId.get(id);
       return node?.data?.status === "pending" || node?.data?.status === "running";
     });
     if (anyActive) waveEverActive.current = true;
@@ -85,7 +96,7 @@ export function usePipelineRunner(scopeNodeIds?: string[]) {
     if (!waveEverActive.current) return;
 
     const allDone = currentWave.every(id => {
-      const node = nodes.find(n => n.id === id);
+      const node = byId.get(id);
       if (!node) return true;
       return !node.data.pendingGenerate && node.data.status !== "pending" && node.data.status !== "running";
     });

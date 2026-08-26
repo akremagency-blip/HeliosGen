@@ -25,9 +25,19 @@ test("topoSort survives an edge whose node is gone", () => {
   assert.deepEqual(topoSort(nodes, [e("a", "ghost"), e("ghost", "b")]).sort(), ["a", "b"]);
 });
 
-test("buildPipelineWaves groups independent nodes and stops on a cycle", () => {
+test("buildPipelineWaves groups independent nodes", () => {
   assert.deepEqual(buildPipelineWaves([n("a"), n("b"), n("c")], [e("a", "c"), e("b", "c")]),
-    [["a", "b"], ["c"]]);
-  // a↔b is unsatisfiable; the guard must return rather than spin forever.
-  assert.deepEqual(buildPipelineWaves([n("a"), n("b")], [e("a", "b"), e("b", "a")]), []);
+    { waves: [["a", "b"], ["c"]], cyclic: [] });
+});
+
+test("buildPipelineWaves reports cyclic nodes instead of dropping them", () => {
+  // a<->b is unsatisfiable. The guard must return rather than spin forever, and
+  // the caller needs to know so it can tell the user something was skipped.
+  assert.deepEqual(buildPipelineWaves([n("a"), n("b")], [e("a", "b"), e("b", "a")]),
+    { waves: [], cyclic: ["a", "b"] });
+
+  // A cycle must not take the schedulable nodes down with it.
+  const mixed = buildPipelineWaves([n("a"), n("b"), n("c")], [e("b", "c"), e("c", "b")]);
+  assert.deepEqual(mixed.waves, [["a"]]);
+  assert.deepEqual(mixed.cyclic.sort(), ["b", "c"]);
 });
