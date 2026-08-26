@@ -13,6 +13,9 @@ const SSE_HEADERS = {
 
 const TIMEOUT_MS = 12 * 60 * 1000; // 12 min hard cap
 
+// How often to check the DB for a result the in-process event never delivered.
+const POLL_MS = 10_000;
+
 function immediate(payload: JobResult): Response {
   return new Response(`data: ${JSON.stringify(payload)}\n\n`, { headers: SSE_HEADERS });
 }
@@ -78,6 +81,7 @@ export async function GET(req: NextRequest) {
         if (closed) return;
         closed = true;
         clearInterval(heartbeat);
+        clearInterval(poll);
         clearTimeout(timeout);
         controller.close();
       };
@@ -97,6 +101,21 @@ export async function GET(req: NextRequest) {
       const timeout = setTimeout(() => {
         send({ status: "error", error: "Generation timed out" });
       }, TIMEOUT_MS);
+
+      // jobEvents is in-process. On a multi-replica deploy the callback can
+      // settle this job on another instance, and this stream would sit here
+      // until the 12-minute timeout reported a failure for a generation that
+      // actually succeeded. The callback writes the row either way, so read it.
+      const poll = setInterval(() => {
+        if (closed) return;
+        recoverJob(taskId)
+          .then((settled) => {
+            if (!settled || closed) return;
+            jobStore.set(taskId, settled);
+            send(settled);
+          })
+          .catch((e) => console.error("[job-stream] poll failed:", e?.message ?? e));
+      }, POLL_MS);
 
       jobEvents.once(`job:${taskId}`, send);
 
