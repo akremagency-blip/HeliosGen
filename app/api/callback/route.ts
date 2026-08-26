@@ -21,8 +21,12 @@ function extractUrls(resultJson?: string): string[] {
 }
 
 function settle(taskId: string, result: Parameters<typeof jobStore.set>[1]) {
-  jobStore.set(taskId, result);
-  jobEvents.emit(`job:${taskId}`, result);
+  // The pending record is the only place the owner is written; without carrying
+  // it across, job-status could not tell whose result it was handing back.
+  const owner = jobStore.get(taskId)?.userId;
+  const owned = owner ? { ...result, userId: owner } : result;
+  jobStore.set(taskId, owned);
+  jobEvents.emit(`job:${taskId}`, owned);
 }
 
 export async function POST(req: NextRequest) {

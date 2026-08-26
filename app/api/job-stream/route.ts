@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { jobStore, type JobResult } from "@/lib/jobStore";
+import { jobStore, mayReadJob, type JobResult } from "@/lib/jobStore";
 import { jobEvents } from "@/lib/jobEvents";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { GUEST_MODE } from "@/lib/guestMode";
+import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 
 const SSE_HEADERS = {
@@ -20,7 +20,7 @@ function immediate(payload: JobResult): Response {
   return new Response(`data: ${JSON.stringify(payload)}\n\n`, { headers: SSE_HEADERS });
 }
 
-async function recoverJob(taskId: string): Promise<JobResult | null> {
+async function recoverJob(taskId: string, caller: string | null): Promise<JobResult | null> {
   if (GUEST_MODE) {
     const gen = guestDb.recoverJob(taskId);
     if (gen?.status === "done") {
@@ -38,6 +38,7 @@ async function recoverJob(taskId: string): Promise<JobResult | null> {
     .from("generations")
     .select("status, video_url, image_url, image_urls, error_msg")
     .eq("task_id", taskId)
+    .eq("user_id", caller ?? "")
     .single();
 
   if (gen?.status === "done") {
@@ -55,14 +56,22 @@ export async function GET(req: NextRequest) {
   const taskId = req.nextUrl.searchParams.get("taskId");
   if (!taskId) return new Response("taskId required", { status: 400 });
 
+  // EventSource cannot send headers; resolveUserId falls back to the cookie
+  // session for exactly this reason.
+  const caller = await resolveUserId(req);
+  if (!GUEST_MODE && !caller) return new Response("Unauthorized", { status: 401 });
+
   // Already settled in jobStore — respond immediately, no stream needed
   const existing = jobStore.get(taskId);
+  if (existing && !GUEST_MODE && !mayReadJob(existing.userId, caller)) {
+    return immediate({ status: "error", error: "Job not found" });
+  }
   if (existing && existing.status !== "pending") {
     return immediate(existing);
   }
 
   if (!existing) {
-    const recovered = await recoverJob(taskId);
+    const recovered = await recoverJob(taskId, caller);
     if (recovered) {
       jobStore.set(taskId, recovered);
       return immediate(recovered);
@@ -108,7 +117,7 @@ export async function GET(req: NextRequest) {
       // actually succeeded. The callback writes the row either way, so read it.
       const poll = setInterval(() => {
         if (closed) return;
-        recoverJob(taskId)
+        recoverJob(taskId, caller)
           .then((settled) => {
             if (!settled || closed) return;
             jobStore.set(taskId, settled);

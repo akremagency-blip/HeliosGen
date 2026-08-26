@@ -4,8 +4,8 @@ import { join } from "path";
 
 export type JobResult =
   | { status: "pending"; type?: "image" | "video"; userId?: string }
-  | { status: "done"; imageUrl?: string; imageUrls?: string[]; videoUrl?: string }
-  | { status: "error"; error: string };
+  | { status: "done"; imageUrl?: string; imageUrls?: string[]; videoUrl?: string; userId?: string }
+  | { status: "error"; error: string; userId?: string };
 
 // tmpdir, not cwd: the app bundle is read-only on Vercel/Lambda, and writeFileSync
 // there threw inside the callback's promise chain — silently stranding every job
@@ -22,6 +22,19 @@ function read(): Record<string, JobResult> {
 
 function write(data: Record<string, JobResult>): void {
   writeFileSync(FILE, JSON.stringify(data), "utf8");
+}
+
+/**
+ * Whether `caller` may read a job owned by `owner`.
+ *
+ * A job settled before ownership was recorded carries no userId. Refusing those
+ * would strand every generation in flight across the deploy that introduces
+ * this, so an unowned job stays readable; everything created from here on is
+ * owned. Guest mode has a single user and is short-circuited by the callers.
+ */
+export function mayReadJob(owner: string | undefined, caller: string | null): boolean {
+  if (!owner) return true;
+  return caller !== null && owner === caller;
 }
 
 const MAX_ENTRIES = 500;

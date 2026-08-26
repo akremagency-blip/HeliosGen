@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jobStore } from "@/lib/jobStore";
+import { jobStore, mayReadJob } from "@/lib/jobStore";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { GUEST_MODE } from "@/lib/guestMode";
+import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 
-async function recoverJob(taskId: string): Promise<"done" | "error" | "pending" | "not_found"> {
+async function recoverJob(taskId: string, caller: string | null): Promise<"done" | "error" | "pending" | "not_found"> {
   if (GUEST_MODE) {
     const gen = guestDb.recoverJob(taskId);
     if (!gen) return "not_found";
@@ -22,10 +22,13 @@ async function recoverJob(taskId: string): Promise<"done" | "error" | "pending" 
     return "pending";
   }
 
+  // Scoped by user: the row is the authority on ownership once the in-memory
+  // record has aged out.
   const { data: gen } = await supabaseAdmin
     .from("generations")
     .select("status, video_url, image_url, image_urls, error_msg")
     .eq("task_id", taskId)
+    .eq("user_id", caller ?? "")
     .single();
 
   if (!gen) return "not_found";
@@ -52,10 +55,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "taskId is required" }, { status: 400 });
   }
 
+  const caller = await resolveUserId(req);
+  if (!GUEST_MODE && !caller) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const result = jobStore.get(taskId);
 
   // Task known to local store — return as-is, no kie.ai polling
   if (result) {
+    if (!GUEST_MODE && !mayReadJob(result.userId, caller)) return NextResponse.json({ status: "not_found" });
     return NextResponse.json(result);
   }
 
@@ -65,7 +74,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ status: "not_found" });
   }
 
-  const recovered = await recoverJob(taskId);
+  const recovered = await recoverJob(taskId, caller);
 
   if (recovered === "done" || recovered === "error") {
     return NextResponse.json(jobStore.get(taskId)!);
