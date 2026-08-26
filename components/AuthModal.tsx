@@ -379,7 +379,7 @@ export default function AuthModal() {
             ) : (
               <form onSubmit={submit} style={{ flex: 1, display: "flex", flexDirection: "column", gap: "14px" }}>
                 <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>
-                  Enter your email and we'll send you a reset link.
+                  Enter your email and we&apos;ll send you a reset link.
                 </p>
                 <FieldLabel label="EMAIL" />
                 <InputWithIcon

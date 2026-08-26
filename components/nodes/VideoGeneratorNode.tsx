@@ -775,8 +775,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         }
       }
       setPickerOpen(false);
-    } catch (e: any) {
-      setCaptureErr(e.message || "Failed to capture frame");
+    } catch (e: unknown) {
+      setCaptureErr(e instanceof Error ? e.message : "Failed to capture frame");
     } finally {
       setCapturing(false);
       updateNodeData(id, { extractingFrame: false });
