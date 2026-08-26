@@ -511,15 +511,44 @@ Only reachable outside the UI, but they should not disagree.
   the input nodes are absent from the add menu by way of an explicit
   `HIDDEN_FROM_MENU`, because they are created by dropping a file.
 
-### 8.5 Not verifiable here
+### 8.5 The assistant swallowed every failure
 
-The assistant's model ids in `lib/models.ts` are passed to kie.ai verbatim.
-kie.ai authenticates before it validates the model — a deliberately nonsense
-path returns the same 401 as a real one — so they cannot be checked without a
-key. Two of them, `claude-opus-4-7` and `claude-sonnet-4-6`, match no released
-Anthropic model; `claude-haiku-4-5` in the same list is real. Worth one
-authenticated call before release.
+kie.ai answers **HTTP 200 with the real status in `body.code`** — the same
+shape that made the credit badge lie in §5. `/api/assistant` gated on
+`upstream.ok`, which is true for those, and then streamed the JSON error out
+under a `text/event-stream` content type. The client scans for `data:` frames,
+finds none, and the assistant does nothing at all: no message, no error, no
+spinner ending. A rejected key, an exhausted balance and an unknown model id
+were all equally invisible.
 
+Measured before the fix:
+
+```
+HTTP/1.1 200 OK
+content-type: text/event-stream
+
+{"code":401,"msg":"Unauthorized – Authentication failed..."}
+```
+
+It now checks the content type alongside the status and returns the provider's
+own message as JSON with a real status code. Verified across all six assistant
+models: `HTTP 401 application/json` each.
+
+### 8.6 The model ids are correct — an earlier note in this document was not
+
+An earlier revision claimed `claude-opus-4-7` and `claude-sonnet-4-6` matched
+no released model. That was wrong: kie.ai's chat market page names both
+verbatim — *"Claude models such as Claude Opus 4.7 and Claude Sonnet 4.6"* —
+and kie.ai's catalogue is its own, not Anthropic's. No change was needed and
+none was made.
+
+One entry does look behind: kie.ai advertises **GPT 5.4** and **GPT 5.5**
+while `lib/models.ts` offers `gpt-5-2`. The exact id strings are not published
+outside the dashboard, and kie.ai authenticates before it validates a model —
+a deliberately nonsense path returns the same 401 as a real one — so guessing
+`gpt-5-5` would risk replacing a working entry with a broken one. Left alone
+deliberately. With §8.5 fixed, a wrong id now announces itself in the UI
+instead of hanging, so this is a one-minute check against a real key.
 ## 9. Before you deploy
 
 1. **Set `CALLBACK_SECRET`** (`openssl rand -hex 32`) if you want the webhook

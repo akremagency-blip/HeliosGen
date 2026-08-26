@@ -163,10 +163,24 @@ export async function POST(req: NextRequest) {
         }),
       });
 
-  if (!upstream.ok) {
+  // kie.ai answers 200 with the real status in body.code, so upstream.ok is
+  // not enough on its own. A rejected key, an exhausted balance or an unknown
+  // model id all arrive as a JSON blob with HTTP 200, which then got streamed
+  // out under an event-stream content type: the client looks for `data:`
+  // frames, finds none, and the assistant silently does nothing at all.
+  const upstreamType = upstream.headers.get("content-type") ?? "";
+  if (!upstream.ok || upstreamType.includes("application/json")) {
     const errText = await upstream.text();
-    return new Response(JSON.stringify({ error: errText }), {
-      status: upstream.status,
+    let errorMsg = errText;
+    let code = upstream.status;
+    try {
+      const parsed = JSON.parse(errText);
+      errorMsg = parsed?.msg ?? parsed?.error?.message ?? parsed?.message ?? errText;
+      if (typeof parsed?.code === "number") code = parsed.code;
+    } catch { /* not JSON — surface the raw text */ }
+    console.error("[assistant] upstream refused", code, errorMsg);
+    return new Response(JSON.stringify({ error: errorMsg }), {
+      status: code >= 400 && code <= 599 ? code : 502,
       headers: { "Content-Type": "application/json" },
     });
   }
