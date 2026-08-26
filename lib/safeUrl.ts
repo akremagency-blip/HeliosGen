@@ -102,3 +102,15 @@ export function isHttpUrl(value: string): boolean {
     return false;
   }
 }
+
+/**
+ * A filename safe to drop into a Content-Disposition attribute.
+ *
+ * A quote or newline here would break out of the header. Lives in this module
+ * with a test because the first inline attempt lost the backslash in its
+ * character class and silently renamed every download to "_._".
+ */
+export function safeFilename(raw: string | null | undefined): string {
+  const cleaned = (raw ?? "download").replace(/[^\w.\- ]+/g, "_").trim().slice(0, 128);
+  return cleaned.replace(/^[.\s]+/, "") || "download";
+}

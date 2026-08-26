@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { originAllowed, isBlockedHost, isHttpUrl, readCapped } from "./safeUrl.ts";
+import { originAllowed, isBlockedHost, isHttpUrl, readCapped, safeFilename } from "./safeUrl.ts";
 
 test("originAllowed matches origins, not string prefixes", () => {
   const allow = ["https://cdn.kie.ai", "https://pub-abc.r2.dev/"];
@@ -62,4 +62,29 @@ test("isHttpUrl rejects anything curl would read as a flag", () => {
   assert.equal(isHttpUrl("file:///etc/passwd"), false);
   assert.equal(isHttpUrl(""), false);
   assert.equal(isHttpUrl("x.openai.azure.com"), false);
+});
+
+test("safeFilename keeps real names and defuses header injection", () => {
+  // The regression this replaced mangled every ordinary filename to "_._".
+  assert.equal(safeFilename("out.mp4"), "out.mp4");
+  assert.equal(safeFilename("sunset-render_2.png"), "sunset-render_2.png");
+  assert.equal(safeFilename("my render.jpg"), "my render.jpg");
+
+  assert.equal(safeFilename(null), "download");
+  assert.equal(safeFilename(""), "download");
+  assert.equal(safeFilename("   "), "download");
+
+  // Nothing that could close the quoted attribute, start a new header, or walk
+  // a path. Asserted as a property — the exact substitution does not matter.
+  for (const evil of [
+    "a\"; x=\"b",
+    "a\r\nSet-Cookie: x=1",
+    "../../etc/passwd",
+    "..\\..\\windows\\system32",
+    "a;b",
+  ]) {
+    const out = safeFilename(evil);
+    assert.ok(!/["\r\n;\\/]/.test(out), evil + " -> " + out);
+    assert.ok(!out.startsWith("."), evil + " -> " + out);
+  }
 });

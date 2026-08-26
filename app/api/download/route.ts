@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { GUEST_MODE } from "@/lib/guestMode";
-import { originAllowed } from "@/lib/safeUrl";
+import { originAllowed, safeFilename } from "@/lib/safeUrl";
 
 const ALLOWED_ORIGINS = [
   process.env.R2_PUBLIC_URL ?? "",
@@ -26,10 +26,7 @@ export const runtime = "edge";
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
-  // Quotes and control chars here would break out of the Content-Disposition attribute.
-  const filename = (req.nextUrl.searchParams.get("filename") ?? "download")
-    .replace(/[^w.-]+/g, "_")
-    .slice(0, 128) || "download";
+  const filename = safeFilename(req.nextUrl.searchParams.get("filename"));
 
   if (!url) return new NextResponse("Missing url", { status: 400 });
   if (!isAllowed(url)) return new NextResponse("Forbidden", { status: 403 });
