@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { originAllowed, isBlockedHost, readCapped } from "./safeUrl.ts";
+import { originAllowed, isBlockedHost, isHttpUrl, readCapped } from "./safeUrl.ts";
 
 test("originAllowed matches origins, not string prefixes", () => {
   const allow = ["https://cdn.kie.ai", "https://pub-abc.r2.dev/"];
@@ -49,4 +49,17 @@ test("readCapped stops at the limit instead of buffering it all", async () => {
 
   assert.equal((await readCapped(body(100), 1000))!.byteLength, 100);
   assert.equal(await readCapped(body(2000), 1000), null);
+});
+
+test("isHttpUrl rejects anything curl would read as a flag", () => {
+  assert.equal(isHttpUrl("https://x.openai.azure.com"), true);
+  assert.equal(isHttpUrl("http://localhost:8080/v1"), true);
+
+  // These reached curl argv as a positional argument, so a leading dash turned
+  // the "endpoint" into an option.
+  assert.equal(isHttpUrl("-K/tmp/curlrc"), false);
+  assert.equal(isHttpUrl("--output=/tmp/x"), false);
+  assert.equal(isHttpUrl("file:///etc/passwd"), false);
+  assert.equal(isHttpUrl(""), false);
+  assert.equal(isHttpUrl("x.openai.azure.com"), false);
 });

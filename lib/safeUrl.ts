@@ -89,3 +89,16 @@ export async function fetchGuarded(url: string, init: RequestInit = {}, maxHops 
   }
   throw new BlockedUrlError("Too many redirects");
 }
+
+/**
+ * A caller-supplied "endpoint" that does not parse as http(s) is not an
+ * endpoint. Notably, one starting with "-" reaches curl's argv as a flag.
+ */
+export function isHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}

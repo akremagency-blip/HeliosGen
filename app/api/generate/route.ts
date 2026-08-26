@@ -13,6 +13,7 @@ import { getKieTokenForUser } from "@/lib/getKieToken";
 import { getAzureKeyForUser } from "@/lib/getAzureKey";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
 import { callbackUrl } from "@/lib/callbackAuth";
+import { isHttpUrl } from "@/lib/safeUrl";
 import * as guestDb from "@/lib/guest/db";
 
 const BASE   = "https://api.kie.ai";
@@ -125,7 +126,11 @@ async function curlMultipartPost(
       args.push("-F", `image[]=@${tmpFiles[i]};type=${images[i].mime}`);
     }
     for (const [k, v] of Object.entries(textFields)) {
-      args.push("-F", `${k}=${v}`);
+      // --form-string, never -F: curl reads a local file when an -F value
+      // starts with "@" or "<", and one of these values is the user's prompt.
+      // A prompt of "@/etc/passwd" would have uploaded that file to whatever
+      // Azure endpoint the same request supplied.
+      args.push("--form-string", `${k}=${v}`);
     }
 
     console.log("[azure/edits/curl] args:", args.map((a) => (a.startsWith("Bearer ") ? "Bearer ***" : a)));
@@ -306,6 +311,11 @@ export async function POST(req: NextRequest) {
 
   // ── Azure Foundry branch ──────────────────────────────────────────────────────
   if (azureBaseUrl && azureDeployment) {
+    // The base lands in curl's argv as a positional argument; one starting with
+    // "-" is parsed as a flag rather than a URL.
+    if (!isHttpUrl(azureBaseUrl)) {
+      return NextResponse.json({ error: "Azure base URL must be a http(s) URL" }, { status: 400 });
+    }
     const azureKey = currentUserId
       ? await getAzureKeyForUser(currentUserId)
       : process.env.AZURE_API_KEY ?? null;

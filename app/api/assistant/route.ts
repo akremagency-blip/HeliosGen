@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { getKieToken } from "@/lib/getKieToken";
 import { getAzureToken } from "@/lib/getAzureKey";
+import { isHttpUrl } from "@/lib/safeUrl";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -68,6 +69,13 @@ export async function POST(req: NextRequest) {
     if (!endpoint) {
       return new Response(
         JSON.stringify({ error: "Azure base URL not configured. Add it in Settings → API Keys." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    // Client-supplied, and it decides where this request (and the key) goes.
+    if (!isHttpUrl(endpoint)) {
+      return new Response(
+        JSON.stringify({ error: "Azure base URL must be a http(s) URL" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }

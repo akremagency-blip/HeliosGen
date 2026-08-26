@@ -5,6 +5,12 @@ import https from "node:https";
 import http  from "node:http";
 import { lookupAssetHash, storeAssetHash } from "./db";
 import { stripMetadata } from "../mediaMetadata";
+import { isBlockedHost } from "../safeUrl";
+
+// Guest mode is single-user, but the README has you expose it over ngrok, and
+// resolveUserId waves every caller through as "guest" there. So this fetcher is
+// reachable from the internet with a caller-chosen URL, exactly like the R2 one.
+const MAX_BYTES = 500 * 1024 * 1024; // 500 MB
 
 const GENERATED_DIR = join(process.cwd(), "public", "generated");
 
@@ -39,6 +45,8 @@ export async function uploadBuffer(buffer: Buffer, contentType: string, folder: 
 function fetchToBuffer(url: string, maxRedirects = 5): Promise<{ buf: Buffer; contentType: string }> {
   return new Promise((resolve, reject) => {
     if (maxRedirects <= 0) return reject(new Error("Too many redirects"));
+    // Checked on every hop, since this recurses through redirects.
+    if (isBlockedHost(url)) return reject(new Error("Blocked URL"));
     const u   = new URL(url);
     const mod = u.protocol === "https:" ? https : (http as unknown as typeof https);
     mod.get(url, (res) => {
@@ -49,7 +57,13 @@ function fetchToBuffer(url: string, maxRedirects = 5): Promise<{ buf: Buffer; co
         return reject(new Error(`HTTP ${res.statusCode} fetching ${url}`));
       }
       const chunks: Buffer[] = [];
-      res.on("data",  (c: Buffer) => chunks.push(c));
+      let total = 0;
+      res.on("data",  (c: Buffer) => {
+        total += c.byteLength;
+        // Unbounded before this: the response went straight to disk.
+        if (total > MAX_BYTES) { res.destroy(); reject(new Error("Response exceeds 500 MB limit")); return; }
+        chunks.push(c);
+      });
       res.on("end",   () => resolve({ buf: Buffer.concat(chunks), contentType: res.headers["content-type"] ?? "image/jpeg" }));
       res.on("error", reject);
     }).on("error", reject);
